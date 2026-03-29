@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/* CodeMirror custom styling for NoteCal */
+.cm-editor {
+  height: 100%;
+  background: transparent !important;
+  outline: none !important;
+}
+
+.cm-scroller {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  overflow: auto !important;
+  padding: 0 !important;
+  overscroll-behavior: none !important; /* Disable elastic scrolling */
+}
+
+.cm-content {
+  padding: 24px !important;
+  caret-color: inherit;
+}
+
+.cm-line {
+  padding: 0 !important;
+}
+
+.cm-gutters {
+  display: none !important;
+}
+
+/* Hide scrollbar for CodeMirror */
+.cm-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.cm-scroller {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Striped background for editor */
+.editor-with-stripes .cm-scroller {
+  background-attachment: local !important;
+  will-change: scroll-position;
+}
