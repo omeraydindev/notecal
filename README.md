@@ -11,6 +11,7 @@ Savings = Income - Rent    // 3,800
 **Features:**
 - Variables and math functions
 - Shorthand multipliers (k, m, b)
+- Instant result popup on text selection
 - Syntax highlighting
 - Dark/light mode
 - Auto-saves to localStorage

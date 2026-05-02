@@ -59,8 +59,17 @@ export default function App() {
     return true;
   });
 
+  // Popup state for instant expression results
+  const [popup, setPopup] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    result: string;
+  }>({ visible: false, x: 0, y: 0, result: '' });
+
   const editorRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const scopeRef = useRef<any>({});
 
   // Persist text to local storage whenever it changes
   useEffect(() => {
@@ -85,6 +94,40 @@ export default function App() {
   const formatNumber = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '';
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(num);
+  };
+
+  // Evaluate a single expression (for popup)
+  const evaluateExpression = (expr: string): string | null => {
+    if (!isMathLoaded || !window.math || !expr.trim()) return null;
+
+    // Process shorthand multipliers (k, m, b)
+    let processedExpr = expr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
+      const multipliers: { [key: string]: number } = { k: 1e3, m: 1e6, b: 1e9 };
+      return `(${num} * ${multipliers[suffix.toLowerCase()]})`;
+    });
+
+    try {
+      // Use the current scope from main evaluation
+      const res = window.math.evaluate(processedExpr, scopeRef.current);
+
+      if (res === undefined || res === null || typeof res === 'function') {
+        return null;
+      }
+
+      // Standard Numbers
+      if (typeof res === 'number') {
+        return formatNumber(res);
+      }
+
+      // Math.js specific objects (Units, Complex numbers, etc.)
+      if (res.isUnit || res.isComplex || res.isFraction) {
+        return res.toString();
+      }
+
+      return null;
+    } catch (err) {
+      return null;
+    }
   };
 
   // Evaluate text line by line whenever it changes
@@ -135,6 +178,7 @@ export default function App() {
 
     setResults(newResults);
     setTotal(currentTotal);
+    scopeRef.current = scope; // Store scope for popup evaluation
   }, [text, isMathLoaded]);
 
   // Synchronize vertical scrolling via native DOM synchronously to prevent lag
@@ -181,6 +225,41 @@ export default function App() {
     setIsClearModalOpen(false);
   };
 
+  // Handle selection changes to show popup
+  const handleSelectionChange = (view: EditorView) => {
+    const selection = view.state.selection.main;
+    const selectedText = view.state.doc.sliceString(selection.from, selection.to);
+
+    if (selectedText && selection.from !== selection.to) {
+      // Skip popup for plain numbers (e.g., "32", "3.14", "-42")
+      const isPlainNumber = /^-?\d+(\.\d+)?$/.test(selectedText.trim());
+      if (isPlainNumber) {
+        setPopup({ visible: false, x: 0, y: 0, result: '' });
+        return;
+      }
+
+      // Evaluate the selected expression
+      const result = evaluateExpression(selectedText);
+      
+      if (result) {
+        // Get cursor position for popup placement
+        const coords = view.coordsAtPos(selection.to);
+        if (coords) {
+          setPopup({
+            visible: true,
+            x: coords.left,
+            y: coords.bottom + 8, // 8px below the selection
+            result: result,
+          });
+        }
+      } else {
+        setPopup({ visible: false, x: 0, y: 0, result: '' });
+      }
+    } else {
+      setPopup({ visible: false, x: 0, y: 0, result: '' });
+    }
+  };
+
   // Styling and layout calculations
   const lineHeight = fontSize * 2;
   const paddingTop = 24; // 24px padding top and bottom
@@ -215,6 +294,13 @@ export default function App() {
       fontSize: `${fontSize}px !important`,
       lineHeight: `${lineHeight}px !important`,
     },
+  });
+
+  // Create extension for selection change handling
+  const selectionExtension = EditorView.updateListener.of((update) => {
+    if (update.selectionSet && update.view) {
+      handleSelectionChange(update.view);
+    }
   });
 
   return (
@@ -298,6 +384,7 @@ export default function App() {
             extensions={[
               mathLanguageExtension,
               editorTheme,
+              selectionExtension,
             ]}
             basicSetup={{
               lineNumbers: false,
@@ -388,6 +475,19 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Instant Result Popup */}
+      {popup.visible && (
+        <div
+          className={`fixed z-50 px-3 py-2 rounded-lg shadow-2xl border font-mono text-sm font-semibold pointer-events-none transition-opacity duration-150 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-white border-slate-300 text-emerald-600'}`}
+          style={{
+            left: `${popup.x}px`,
+            top: `${popup.y}px`,
+          }}
+        >
+          = {popup.result}
         </div>
       )}
     </div>
