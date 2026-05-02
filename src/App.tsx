@@ -48,7 +48,18 @@ export default function App() {
   const [results, setResults] = useState<Result[]>([]);
   const [total, setTotal] = useState(0);
   const [isMathLoaded, setIsMathLoaded] = useState(false);
-  const [fontSize, setFontSize] = useState(17);
+  const [fontSize, setFontSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('notecal-fontSize');
+      if (saved !== null) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= 12 && parsed <= 32) {
+          return parsed;
+        }
+      }
+    }
+    return 17;
+  });
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   
   // Default to system theme preferences
@@ -77,6 +88,13 @@ export default function App() {
       localStorage.setItem('notecal-text', text);
     }
   }, [text]);
+
+  // Persist font size to local storage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('notecal-fontSize', fontSize.toString());
+    }
+  }, [fontSize]);
 
   // Dynamically load Math.js from CDN for robust and safe evaluation
   useEffect(() => {
