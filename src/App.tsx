@@ -81,6 +81,10 @@ export default function App() {
   const editorRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const scopeRef = useRef<any>({});
+  const currencyRates = useRef<Record<string, number>>({});
+  const availableCurrencies = useRef<string[]>([]);
+  const currencyFetchTriggered = useRef(false);
+  const [currencyLoaded, setCurrencyLoaded] = useState(false);
 
   // Persist text to local storage whenever it changes
   useEffect(() => {
@@ -108,6 +112,55 @@ export default function App() {
     script.onload = () => setIsMathLoaded(true);
     document.body.appendChild(script);
   }, []);
+
+  // Fetch currency rates only when a conversion function is used in text
+  useEffect(() => {
+    if (!isMathLoaded || !window.math || currencyFetchTriggered.current) return;
+
+    const currencyPattern = /\b[a-z]{3}_to_[a-z]{3}\(\)/;
+    if (!currencyPattern.test(text)) return;
+
+    currencyFetchTriggered.current = true;
+
+    const fetchCurrencyRates = async () => {
+      try {
+        const response = await fetch('https://open.er-api.com/v6/latest/USD');
+        const data = await response.json();
+        
+        if (data && data.rates) {
+          const rates = { USD: 1, ...data.rates };
+          const currencies = Object.keys(rates);
+          
+          currencyRates.current = rates;
+          availableCurrencies.current = currencies;
+
+          // Generate dynamic conversion functions
+          const currencyFunctions: Record<string, () => number> = {};
+          
+          for (const from of currencies) {
+            for (const to of currencies) {
+              if (from !== to) {
+                const fnName = `${from.toLowerCase()}_to_${to.toLowerCase()}`;
+                currencyFunctions[fnName] = () => {
+                  const fromRate = rates[from];
+                  const toRate = rates[to];
+                  return toRate / fromRate;
+                };
+              }
+            }
+          }
+
+          // Add functions to scope
+          Object.assign(scopeRef.current, currencyFunctions);
+          setCurrencyLoaded(true);
+        }
+      } catch (error) {
+        console.error('Failed to fetch currency rates:', error);
+      }
+    };
+
+    fetchCurrencyRates();
+  }, [isMathLoaded, text]);
 
   const formatNumber = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '';
@@ -153,7 +206,10 @@ export default function App() {
     if (!isMathLoaded || !window.math) return;
 
     const lines = text.split('\n');
-    const scope = {}; // Reset variables scope on every render
+    const currencyFunctions = Object.fromEntries(
+      Object.entries(scopeRef.current).filter(([_, v]) => typeof v === 'function')
+    );
+    const scope = { ...currencyFunctions }; // Reset variables scope on every render, but keep currency functions
     let currentTotal = 0;
 
     const newResults = lines.map((line) => {
@@ -197,7 +253,7 @@ export default function App() {
     setResults(newResults);
     setTotal(currentTotal);
     scopeRef.current = scope; // Store scope for popup evaluation
-  }, [text, isMathLoaded]);
+  }, [text, isMathLoaded, currencyLoaded]);
 
   // Synchronize vertical scrolling via native DOM synchronously to prevent lag
   useEffect(() => {
