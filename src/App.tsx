@@ -53,7 +53,7 @@ export default function App() {
       const saved = localStorage.getItem('notecal-fontSize');
       if (saved !== null) {
         const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed >= 12 && parsed <= 32) {
+        if (!isNaN(parsed) && parsed >= 10 && parsed <= 32) {
           return parsed;
         }
       }
@@ -345,7 +345,7 @@ export default function App() {
 
           {/* Font Size Controls */}
           <div className={`flex items-center space-x-1 border rounded-lg p-1 transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-100'}`}>
-            <button onClick={() => setFontSize(Math.max(12, fontSize - 1))} className={`p-1.5 rounded hover:bg-emerald-500/20 transition-colors ${isDarkMode ? 'text-slate-400 hover:text-emerald-400' : 'text-slate-500 hover:text-emerald-600'}`} title="Decrease Font Size"><ZoomOut size={18} /></button>
+            <button onClick={() => setFontSize(Math.max(10, fontSize - 1))} className={`p-1.5 rounded hover:bg-emerald-500/20 transition-colors ${isDarkMode ? 'text-slate-400 hover:text-emerald-400' : 'text-slate-500 hover:text-emerald-600'}`} title="Decrease Font Size"><ZoomOut size={18} /></button>
             <div className={`w-px h-4 mx-1 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`}></div>
             <button onClick={() => setFontSize(Math.min(32, fontSize + 1))} className={`p-1.5 rounded hover:bg-emerald-500/20 transition-colors ${isDarkMode ? 'text-slate-400 hover:text-emerald-400' : 'text-slate-500 hover:text-emerald-600'}`} title="Increase Font Size"><ZoomIn size={18} /></button>
           </div>
