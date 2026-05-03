@@ -167,12 +167,41 @@ export default function App() {
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(num);
   };
 
+  const stripComments = (expr: string, isInBlockComment = false) => {
+    let result = '';
+    let index = 0;
+
+    while (index < expr.length) {
+      if (isInBlockComment) {
+        const blockEnd = expr.indexOf('*/', index);
+        if (blockEnd === -1) return { expr: result.trim(), isInBlockComment: true };
+        index = blockEnd + 2;
+        isInBlockComment = false;
+        continue;
+      }
+
+      if (expr.startsWith('//', index)) break;
+
+      if (expr.startsWith('/*', index)) {
+        isInBlockComment = true;
+        index += 2;
+        continue;
+      }
+
+      result += expr[index];
+      index += 1;
+    }
+
+    return { expr: result.trim(), isInBlockComment };
+  };
+
   // Evaluate a single expression (for popup)
   const evaluateExpression = (expr: string): string | null => {
-    if (!isMathLoaded || !window.math || !expr.trim()) return null;
+    const { expr: uncommentedExpr } = stripComments(expr);
+    if (!isMathLoaded || !window.math || !uncommentedExpr) return null;
 
     // Process shorthand multipliers (k, m, b)
-    let processedExpr = expr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
+    const processedExpr = uncommentedExpr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
       const multipliers: { [key: string]: number } = { k: 1e3, m: 1e6, b: 1e9 };
       return `(${num} * ${multipliers[suffix.toLowerCase()]})`;
     });
@@ -211,12 +240,14 @@ export default function App() {
     );
     const scope = { ...currencyFunctions }; // Reset variables scope on every render, but keep currency functions
     let currentTotal = 0;
+    let isInBlockComment = false;
 
     const newResults = lines.map((line) => {
-      // 1. Ignore comments
-      if (line.trim().startsWith('//')) return { text: '', value: null };
+      const strippedLine = stripComments(line, isInBlockComment);
+      isInBlockComment = strippedLine.isInBlockComment;
 
-      let expr = line;
+      let expr = strippedLine.expr;
+      if (!expr) return { text: '', value: null };
 
       // 2. Process shorthand multipliers (k, m, b)
       expr = expr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {

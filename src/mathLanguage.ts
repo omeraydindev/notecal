@@ -1,11 +1,33 @@
-import { StreamLanguage } from '@codemirror/language';
+import { StreamLanguage, type StringStream } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 
 // Define the math notation language
 const mathNotation = {
-  token(stream: any) {
+  startState() {
+    return { inBlockComment: false };
+  },
+
+  token(stream: StringStream, state: { inBlockComment: boolean }) {
+    if (state.inBlockComment) {
+      if (stream.match(/^.*?\*\//)) {
+        state.inBlockComment = false;
+      } else {
+        stream.skipToEnd();
+      }
+      return 'comment';
+    }
+
     // Comments
     if (stream.match(/^\/\/.*/)) {
+      return 'comment';
+    }
+
+    if (stream.match(/^\/\*.*?\*\//)) {
+      return 'comment';
+    }
+
+    if (stream.match(/^\/\*.*/)) {
+      state.inBlockComment = true;
       return 'comment';
     }
 
@@ -25,7 +47,7 @@ const mathNotation = {
     }
 
     // Operators
-    if (stream.match(/^[+\-*\/^=()]/)) {
+    if (stream.match(/^[+\-*/^=()]/)) {
       return 'operator';
     }
 

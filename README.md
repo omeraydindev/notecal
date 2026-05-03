@@ -12,6 +12,7 @@ Savings = Income - Rent    // 3,800
 - Variables and math functions
 - Shorthand multipliers (k, m, b)
 - Built-in functions for live currency conversion (`usd_to_try()`, `eur_to_usd()`, etc.)
+- Line and block comments (`//`, `/* ... */`)
 - Instant result popup on text selection
 - Syntax highlighting
 - Dark/light mode
