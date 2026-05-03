@@ -557,7 +557,8 @@ export default function App() {
 
   // Styling and layout calculations
   const lineHeight = fontSize * 2;
-  const paddingTop = 24; // 24px padding top and bottom
+  const paddingTop = 24;
+  const paddingBottom = `calc(${paddingTop}px + 50vh)`;
   const stripeColor = isDarkMode ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)';
   
   // By shifting the starting Y position strictly upwards by one line height, 
@@ -568,7 +569,7 @@ export default function App() {
     fontSize: `${fontSize}px`,
     lineHeight: `${lineHeight}px`,
     paddingTop: `${paddingTop}px`,
-    paddingBottom: `${paddingTop}px`,
+    paddingBottom: paddingBottom,
     backgroundImage: `repeating-linear-gradient(transparent, transparent ${lineHeight}px, ${stripeColor} ${lineHeight}px, ${stripeColor} ${lineHeight * 2}px)`,
     backgroundAttachment: 'local',
     backgroundPosition: `0 ${paddingTop - lineHeight}px`,
@@ -578,13 +579,14 @@ export default function App() {
   const editorContainerStyle = {
     '--line-height': `${lineHeight}px`,
     '--padding-top': `${paddingTop}px`,
+    '--padding-bottom': paddingBottom,
     '--stripe-color': stripeColor,
   } as CSSProperties;
 
   // Create EditorView theme to force exact line height matching stripes
   const editorTheme = EditorView.theme({
     '.cm-content': {
-      padding: '24px !important',
+      padding: 'var(--padding-top) var(--padding-top) var(--padding-bottom) var(--padding-top) !important',
     },
     '.cm-line': {
       padding: '0 !important',
