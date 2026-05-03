@@ -1,0 +1,32 @@
+# AGENTS.md
+
+## Product Context
+- NoteCal is a notepad-style calculator: users type freeform notes and math expressions, then see line-by-line results plus a total instantly.
+- The app is useful because calculations stay readable and editable alongside surrounding notes instead of being isolated calculator inputs.
+
+## Commands
+- Use npm; `package-lock.json` is the source of truth and CI installs with `npm ci`.
+- Never run `npm run dev` or otherwise start the dev server; the user handles local serving.
+- `npm run build` runs `tsc -b` before `vite build`; use this as the main verification step because there is no test script.
+- `npm run lint` runs ESLint over the repo; run it for TS/React changes.
+- There is no configured unit test runner or single-test command.
+
+## Git Workflow
+- Never run destructive or state-changing git commands, including `git add`, `git commit`, `git push`, `git pull`, resets, checkouts, rebases, or merges; the user handles git operations.
+- After completing a feature or bugfix, suggest one conventional commit message at the end of the final response.
+- Suggested commit messages must be lowercase, have no parentheses, and the subject after the type must start with a verb, for example `fix: align result panel scrolling`.
+
+## App Structure
+- This is a single-package React 19 + TypeScript + Vite app; the runtime entrypoint is `src/main.tsx`, and nearly all UI/evaluation behavior lives in `src/App.tsx`.
+- `src/mathLanguage.ts` defines the custom CodeMirror stream language for NoteCal syntax, while `src/mathTheme.ts` defines light/dark CodeMirror themes.
+- Tailwind CSS v4 is wired through `@tailwindcss/vite` in `vite.config.ts` and imported from `src/index.css`; there is no separate Tailwind config file.
+
+## Runtime Gotchas
+- Math evaluation depends on loading Math.js from `https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js` at runtime; it is intentionally not imported from npm.
+- Currency conversion functions are generated only after text contains a zero-argument pattern like `usd_to_try()` and rates are fetched from `https://open.er-api.com/v6/latest/USD`.
+- User text and font size persist in `localStorage` keys `notecal-text` and `notecal-fontSize`; theme follows `prefers-color-scheme` and is not persisted.
+- The results panel is line-synchronized to CodeMirror scrolling via direct DOM access to `.cm-scroller`; changes to editor layout, line height, or padding can desync results.
+- Numeric shorthand handling (`k`, `m`, `b`) and comment stripping are duplicated for full-line evaluation and selection-popup evaluation; keep behavior aligned when changing expression parsing.
+
+## Deployment
+- Pushes to `main` trigger `.github/workflows/pages-deployment.yaml`, which builds with Node 20 and publishes `dist` to Cloudflare Pages project `notecal`.
