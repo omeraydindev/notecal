@@ -1,8 +1,9 @@
 # AGENTS.md
 
 ## Product Context
-- NoteCal is a notepad-style calculator: users type freeform notes and math expressions, then see line-by-line results plus a total instantly.
+- NoteCal is a notepad-style calculator: users type freeform notes and math expressions, then see line-by-line results instantly.
 - The app is useful because calculations stay readable and editable alongside surrounding notes instead of being isolated calculator inputs.
+- Users can keep multiple persisted note tabs, each with its own title and text.
 
 ## Commands
 - Use npm; `package-lock.json` is the source of truth and CI installs with `npm ci`.
@@ -24,7 +25,7 @@
 ## Runtime Gotchas
 - Math evaluation depends on loading Math.js from `https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js` at runtime; it is intentionally not imported from npm.
 - Currency conversion functions are generated only after text contains a zero-argument pattern like `usd_to_try()` and rates are fetched from `https://open.er-api.com/v6/latest/USD`.
-- User text and font size persist in `localStorage` keys `notecal-text` and `notecal-fontSize`; theme follows `prefers-color-scheme` and is not persisted.
+- Tabs persist in `localStorage` under `notecal-tabs`; legacy single-note text may exist under `notecal-text` and is migrated as a fallback. Font size persists under `notecal-fontSize`; theme follows `prefers-color-scheme` and is not persisted.
 - The results panel is line-synchronized to CodeMirror scrolling via direct DOM access to `.cm-scroller`; changes to editor layout, line height, or padding can desync results.
 - Numeric shorthand handling (`k`, `m`, `b`) and comment stripping are duplicated for full-line evaluation and selection-popup evaluation; keep behavior aligned when changing expression parsing.
 

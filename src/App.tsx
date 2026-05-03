@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Calculator, Trash2, Sun, Moon, ZoomIn, ZoomOut } from 'lucide-react';
+import { useState, useEffect, useRef, type CSSProperties } from 'react';
+import { Calculator, Sun, Moon, ZoomIn, ZoomOut, Plus, X } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { mathLanguageExtension } from './mathLanguage';
@@ -8,8 +8,23 @@ import { mathDarkTheme, mathLightTheme } from './mathTheme';
 // Extend Window interface to include math.js
 declare global {
   interface Window {
-    math: any;
+    math: MathApi;
   }
+}
+
+type MathScope = Record<string, unknown>;
+
+type MathDisplayObject = {
+  isUnit?: boolean;
+  isComplex?: boolean;
+  isFraction?: boolean;
+  toString: () => string;
+};
+
+type MathEvaluationResult = number | MathDisplayObject | ((...args: never[]) => unknown) | null | undefined;
+
+interface MathApi {
+  evaluate: (expr: string, scope?: MathScope) => MathEvaluationResult;
 }
 
 interface Result {
@@ -17,36 +32,134 @@ interface Result {
   value: number | null;
 }
 
+interface NoteTab {
+  id: string;
+  title: string;
+  text: string;
+}
+
+interface StoredTabsState {
+  tabs: NoteTab[];
+  activeTabId: string;
+}
+
+const TABS_STORAGE_KEY = 'notecal-tabs';
+const LEGACY_TEXT_STORAGE_KEY = 'notecal-text';
+
 const INITIAL_TEXT = `// Welcome to NoteCal!
 // Type anywhere, math gets calculated automatically on the right.
 
-Income = 5k
-Rent = 1.2k
-Groceries = 150 * 4
-Utilities = 200
-Subscriptions = 15 + 10 + 12.50
+income = 5k
+rent = 1.2k
+groceries = 150 * 4
+utilities = 200
+subscriptions = 15 + 10 + 12.50
 
-Total = Rent + Groceries + Utilities + Subscriptions
+total = rent + groceries + utilities + subscriptions
 
 // You can use variables and shorthands (k, m, b):
-Savings = 0.20 * Income
-Bonus = 1.5m
+savings = 0.20 * income
+bonus = 1.5m
 
 // And complex math functions:
 sqrt(144) + 2^3
 sin(45 deg)
 `;
 
-export default function App() {
-  const [text, setText] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('notecal-text');
-      if (saved !== null) return saved;
+const createTabId = () => `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const getDefaultTabTitle = (index: number) => {
+  return index === 0 ? 'New Note' : `New Note (${index + 1})`;
+};
+
+const createTab = (text = '', title = 'New Note'): NoteTab => ({
+  id: createTabId(),
+  title,
+  text,
+});
+
+const normalizeTab = (tab: unknown, index: number): NoteTab | null => {
+  if (!tab || typeof tab !== 'object') return null;
+  const candidate = tab as Partial<NoteTab>;
+  if (typeof candidate.id !== 'string' || typeof candidate.text !== 'string') return null;
+
+  return {
+    id: candidate.id,
+    title: typeof candidate.title === 'string' && candidate.title.trim()
+      ? candidate.title.trim()
+      : getDefaultTabTitle(index),
+    text: candidate.text,
+  };
+};
+
+const normalizeTabsState = (state: unknown): StoredTabsState | null => {
+  if (!state || typeof state !== 'object') return null;
+
+  const candidate = state as Partial<StoredTabsState>;
+  if (!Array.isArray(candidate.tabs)) return null;
+
+  const tabs = candidate.tabs
+    .map((tab, index) => normalizeTab(tab, index))
+    .filter((tab): tab is NoteTab => tab !== null);
+  if (tabs.length === 0) return null;
+
+  const activeTabId = tabs.some((tab) => tab.id === candidate.activeTabId)
+    ? (candidate.activeTabId as string)
+    : tabs[0].id;
+
+  return { tabs, activeTabId };
+};
+
+const loadInitialTabsState = (): StoredTabsState => {
+  if (typeof window !== 'undefined') {
+    const savedTabs = localStorage.getItem(TABS_STORAGE_KEY);
+    if (savedTabs !== null) {
+      try {
+        const normalized = normalizeTabsState(JSON.parse(savedTabs));
+        if (normalized) return normalized;
+      } catch (error) {
+        console.warn('Failed to load saved tabs:', error);
+      }
     }
-    return INITIAL_TEXT;
-  });
+
+    const legacyText = localStorage.getItem(LEGACY_TEXT_STORAGE_KEY);
+    const text = legacyText ?? INITIAL_TEXT;
+    const tab = createTab(text, 'New Note');
+    return { tabs: [tab], activeTabId: tab.id };
+  }
+
+  const tab = createTab(INITIAL_TEXT, 'New Note');
+  return { tabs: [tab], activeTabId: tab.id };
+};
+
+const getTabTitle = (tab: NoteTab, index: number) => {
+  return tab.title.trim() || getDefaultTabTitle(index);
+};
+
+const getNextNewNoteTitle = (tabs: NoteTab[]) => {
+  const existingTitles = new Set(tabs.map((tab) => tab.title.trim()));
+  if (!existingTitles.has('New Note')) return 'New Note';
+
+  let index = 2;
+  while (existingTitles.has(`New Note (${index})`)) {
+    index += 1;
+  }
+
+  return `New Note (${index})`;
+};
+
+const isMathDisplayObject = (value: MathEvaluationResult): value is MathDisplayObject => (
+  typeof value === 'object'
+  && value !== null
+  && ('isUnit' in value || 'isComplex' in value || 'isFraction' in value)
+);
+
+export default function App() {
+  const [tabsState, setTabsState] = useState(loadInitialTabsState);
+  const { tabs, activeTabId } = tabsState;
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const text = activeTab?.text ?? '';
   const [results, setResults] = useState<Result[]>([]);
-  const [total, setTotal] = useState(0);
   const [isMathLoaded, setIsMathLoaded] = useState(false);
   const [fontSize, setFontSize] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -60,7 +173,8 @@ export default function App() {
     }
     return 17;
   });
-  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [isRenamingTab, setIsRenamingTab] = useState(false);
+  const [renameDraft, setRenameDraft] = useState('');
   
   // Default to system theme preferences
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -80,18 +194,23 @@ export default function App() {
 
   const editorRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
-  const scopeRef = useRef<any>({});
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const scopeRef = useRef<MathScope>({});
   const currencyRates = useRef<Record<string, number>>({});
   const availableCurrencies = useRef<string[]>([]);
   const currencyFetchTriggered = useRef(false);
   const [currencyLoaded, setCurrencyLoaded] = useState(false);
 
-  // Persist text to local storage whenever it changes
+  // Persist tabs to local storage whenever they change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('notecal-text', text);
+      try {
+        localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(tabsState));
+      } catch (error) {
+        console.warn('Failed to persist tabs:', error);
+      }
     }
-  }, [text]);
+  }, [tabsState]);
 
   // Persist font size to local storage whenever it changes
   useEffect(() => {
@@ -220,12 +339,12 @@ export default function App() {
       }
 
       // Math.js specific objects (Units, Complex numbers, etc.)
-      if (res.isUnit || res.isComplex || res.isFraction) {
+      if (isMathDisplayObject(res)) {
         return res.toString();
       }
 
       return null;
-    } catch (err) {
+    } catch {
       return null;
     }
   };
@@ -236,10 +355,9 @@ export default function App() {
 
     const lines = text.split('\n');
     const currencyFunctions = Object.fromEntries(
-      Object.entries(scopeRef.current).filter(([_, v]) => typeof v === 'function')
+      Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
     );
     const scope = { ...currencyFunctions }; // Reset variables scope on every render, but keep currency functions
-    let currentTotal = 0;
     let isInBlockComment = false;
 
     const newResults = lines.map((line) => {
@@ -265,24 +383,22 @@ export default function App() {
 
         // Standard Numbers
         if (typeof res === 'number') {
-          currentTotal += res;
           return { text: formatNumber(res), value: res };
         }
 
         // Math.js specific objects (Units, Complex numbers, etc.)
-        if (res.isUnit || res.isComplex || res.isFraction) {
+        if (isMathDisplayObject(res)) {
           return { text: res.toString(), value: null };
         }
 
         return { text: '', value: null };
-      } catch (err) {
+      } catch {
         // Silently ignore errors (e.g., normal text that isn't valid math)
         return { text: '', value: null };
       }
     });
 
     setResults(newResults);
-    setTotal(currentTotal);
     scopeRef.current = scope; // Store scope for popup evaluation
   }, [text, isMathLoaded, currencyLoaded]);
 
@@ -321,13 +437,87 @@ export default function App() {
     };
   }, []);
 
-  const handleClear = () => {
-    setIsClearModalOpen(true);
+  useEffect(() => {
+    const scroller = editorRef.current?.querySelector('.cm-scroller');
+    const resultsPanel = resultsRef.current;
+    if (!scroller || !resultsPanel) return;
+
+    resultsPanel.scrollTop = scroller.scrollTop;
+  }, [activeTabId]);
+
+  useEffect(() => {
+    if (!isRenamingTab) return;
+
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [isRenamingTab]);
+
+  const updateActiveTabText = (nextText: string) => {
+    setTabsState((current) => ({
+      ...current,
+      tabs: current.tabs.map((tab) => (
+        tab.id === current.activeTabId ? { ...tab, text: nextText } : tab
+      )),
+    }));
   };
 
-  const confirmClear = () => {
-    setText('');
-    setIsClearModalOpen(false);
+  const beginRenameTab = (tabId: string, title: string) => {
+    setPopup({ visible: false, x: 0, y: 0, result: '' });
+    setRenameDraft(title);
+    setIsRenamingTab(true);
+    setTabsState((current) => ({ ...current, activeTabId: tabId }));
+  };
+
+  const commitRenameActiveTab = () => {
+    const nextTitle = renameDraft.trim() || 'Untitled';
+    setTabsState((current) => ({
+      ...current,
+      tabs: current.tabs.map((tab) => (
+        tab.id === current.activeTabId ? { ...tab, title: nextTitle } : tab
+      )),
+    }));
+    setIsRenamingTab(false);
+  };
+
+  const cancelRenameActiveTab = () => {
+    setIsRenamingTab(false);
+  };
+
+  const selectTab = (tabId: string) => {
+    setPopup({ visible: false, x: 0, y: 0, result: '' });
+    setIsRenamingTab(false);
+    setTabsState((current) => ({ ...current, activeTabId: tabId }));
+  };
+
+  const addTab = () => {
+    setPopup({ visible: false, x: 0, y: 0, result: '' });
+    setIsRenamingTab(false);
+    setTabsState((current) => {
+      const tab = createTab('', getNextNewNoteTitle(current.tabs));
+
+      return {
+        tabs: [...current.tabs, tab],
+        activeTabId: tab.id,
+      };
+    });
+  };
+
+  const closeTab = (tabId: string) => {
+    setPopup({ visible: false, x: 0, y: 0, result: '' });
+    setIsRenamingTab(false);
+    setTabsState((current) => {
+      if (current.tabs.length <= 1) return current;
+
+      const tabIndex = current.tabs.findIndex((tab) => tab.id === tabId);
+      if (tabIndex === -1) return current;
+
+      const nextTabs = current.tabs.filter((tab) => tab.id !== tabId);
+      const nextActiveTabId = current.activeTabId === tabId
+        ? nextTabs[Math.max(0, tabIndex - 1)].id
+        : current.activeTabId;
+
+      return { tabs: nextTabs, activeTabId: nextActiveTabId };
+    });
   };
 
   // Handle selection changes to show popup
@@ -385,6 +575,12 @@ export default function App() {
     willChange: 'scroll-position', // Hardware accelerate scrolling
   };
 
+  const editorContainerStyle = {
+    '--line-height': `${lineHeight}px`,
+    '--padding-top': `${paddingTop}px`,
+    '--stripe-color': stripeColor,
+  } as CSSProperties;
+
   // Create EditorView theme to force exact line height matching stripes
   const editorTheme = EditorView.theme({
     '.cm-content': {
@@ -402,6 +598,7 @@ export default function App() {
   });
 
   // Create extension for selection change handling
+  // eslint-disable-next-line react-hooks/refs -- CodeMirror invokes this callback after render as an editor update listener.
   const selectionExtension = EditorView.updateListener.of((update) => {
     if (update.selectionSet && update.view) {
       handleSelectionChange(update.view);
@@ -417,47 +614,121 @@ export default function App() {
       `}</style>
 
       {/* Header */}
-      <header className={`flex items-center justify-between px-6 py-4 border-b shadow-sm z-10 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+      <header className={`flex items-center justify-between px-5 sm:px-6 py-2.5 border-b shadow-sm z-10 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center space-x-3">
-          <div className="p-2 bg-emerald-500/20 text-emerald-500 rounded-lg">
-            <Calculator size={24} />
+          <div className="p-1.5 bg-emerald-500/20 text-emerald-500 rounded-lg">
+            <Calculator size={22} />
           </div>
-          <h1 className={`text-xl font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>NoteCal</h1>
+          <h1 className={`text-lg font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>NoteCal</h1>
         </div>
         
-        <div className="flex items-center space-x-2 md:space-x-3">
+        <div className="flex items-center space-x-2.5">
           {!isMathLoaded && (
             <span className="text-sm text-slate-400 animate-pulse hidden sm:inline mr-2">Loading Math Engine...</span>
           )}
 
           {/* Font Size Controls */}
-          <div className={`flex items-center space-x-1 border rounded-lg p-1 transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-100'}`}>
-            <button onClick={() => setFontSize(Math.max(10, fontSize - 1))} className={`p-1.5 rounded hover:bg-emerald-500/20 transition-colors ${isDarkMode ? 'text-slate-400 hover:text-emerald-400' : 'text-slate-500 hover:text-emerald-600'}`} title="Decrease Font Size"><ZoomOut size={18} /></button>
-            <div className={`w-px h-4 mx-1 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`}></div>
-            <button onClick={() => setFontSize(Math.min(32, fontSize + 1))} className={`p-1.5 rounded hover:bg-emerald-500/20 transition-colors ${isDarkMode ? 'text-slate-400 hover:text-emerald-400' : 'text-slate-500 hover:text-emerald-600'}`} title="Increase Font Size"><ZoomIn size={18} /></button>
+          <div className={`flex items-center rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:border-slate-300'}`}>
+            <button
+              onClick={() => setFontSize(Math.max(10, fontSize - 1))}
+              className={`p-2.5 rounded-l-lg transition-colors ${isDarkMode ? 'hover:text-emerald-400' : 'hover:text-emerald-600'}`}
+              title="Decrease Font Size"
+            >
+              <ZoomOut size={17} />
+            </button>
+            <div className={`w-px h-4 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`}></div>
+            <button
+              onClick={() => setFontSize(Math.min(32, fontSize + 1))}
+              className={`p-2.5 rounded-r-lg transition-colors ${isDarkMode ? 'hover:text-emerald-400' : 'hover:text-emerald-600'}`}
+              title="Increase Font Size"
+            >
+              <ZoomIn size={17} />
+            </button>
           </div>
-
-          <div className={`h-6 w-px mx-1 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`}></div>
 
           {/* Theme Toggle */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-amber-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-amber-500 hover:border-slate-300'}`}
+            className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
             title="Toggle Theme"
           >
-            {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
           </button>
 
-          {/* Clear Button */}
-          <button
-            onClick={handleClear}
-            className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-red-400 hover:border-red-900/50 hover:bg-red-900/20' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50'}`}
-            title="Clear All"
-          >
-            <Trash2 size={18} />
-          </button>
         </div>
       </header>
+
+      {/* Tabs */}
+      <div className={`flex items-stretch border-b overflow-x-auto no-scrollbar transition-colors duration-200 ${isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
+        {tabs.map((tab, index) => {
+          const isActive = tab.id === activeTabId;
+          const title = getTabTitle(tab, index);
+
+          return (
+            <div
+              key={tab.id}
+              className={`group flex shrink-0 basis-22 sm:basis-26 items-center h-9 border-r text-sm transition-colors ${isActive ? (isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100 shadow-[inset_0_2px_0_#10b981]' : 'bg-white border-slate-300 text-slate-900 shadow-[inset_0_2px_0_#059669]') : (isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200' : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-white hover:text-slate-800')}`}
+            >
+              {isActive && isRenamingTab ? (
+                <input
+                  ref={renameInputRef}
+                  value={renameDraft}
+                  onChange={(event) => setRenameDraft(event.target.value)}
+                  onBlur={commitRenameActiveTab}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') commitRenameActiveTab();
+                    if (event.key === 'Escape') cancelRenameActiveTab();
+                  }}
+                  className={`min-w-0 flex-1 h-full px-3 bg-transparent outline-none ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}
+                  aria-label="Rename current tab"
+                />
+              ) : (
+                <button
+                  onClick={(event) => {
+                    if (event.shiftKey && tabs.length > 1) {
+                      closeTab(tab.id);
+                      return;
+                    }
+
+                    selectTab(tab.id);
+                  }}
+                  onDoubleClick={() => {
+                    beginRenameTab(tab.id, title);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'F2') {
+                      event.preventDefault();
+                      beginRenameTab(tab.id, title);
+                    }
+                  }}
+                  className={`min-w-0 flex-1 h-full px-3 ${tabs.length === 1 ? 'text-center' : 'text-left'}`}
+                  title={`${title} (double-click or F2 to rename${tabs.length > 1 ? ', shift-click to close' : ''})`}
+                >
+                  <span className="block truncate">{title}</span>
+                </button>
+              )}
+              {tabs.length > 1 && (
+                <button
+                  aria-label={`Close ${title}`}
+                  onClick={() => closeTab(tab.id)}
+                  className={`mr-2 shrink-0 p-0.5 opacity-60 transition-colors group-hover:opacity-100 ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+
+        <button
+          onClick={addTab}
+          className={`shrink-0 flex items-center gap-1.5 h-9 px-3 text-sm transition-colors ${isDarkMode ? 'border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-emerald-300' : 'border-slate-200 text-slate-500 hover:bg-white hover:text-emerald-700'}`}
+          title="New note"
+        >
+          <Plus size={15} />
+        </button>
+
+      </div>
 
       {/* Main Workspace */}
       <main className="flex flex-1 overflow-hidden relative">
@@ -465,11 +736,7 @@ export default function App() {
         <div
           ref={editorRef}
           className="flex-1 w-full h-full overflow-hidden"
-          style={{
-            ['--line-height' as any]: `${lineHeight}px`,
-            ['--padding-top' as any]: `${paddingTop}px`,
-            ['--stripe-color' as any]: stripeColor,
-          }}
+          style={editorContainerStyle}
         >
           <style>{`
             .editor-with-stripes .cm-scroller {
@@ -484,7 +751,7 @@ export default function App() {
           `}</style>
           <CodeMirror
             value={text}
-            onChange={(value) => setText(value)}
+            onChange={updateActiveTabText}
             theme={isDarkMode ? mathDarkTheme : mathLightTheme}
             extensions={[
               mathLanguageExtension,
@@ -536,52 +803,6 @@ export default function App() {
           </div>
         </div>
       </main>
-
-      {/* Footer / Total Sum */}
-      <footer className={`flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-t z-10 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
-        <a 
-          href="https://omeraydin.dev" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className={`text-xs transition-colors ${isDarkMode ? 'text-slate-500 hover:text-slate-400' : 'text-slate-400 hover:text-slate-600'}`}
-        >
-          omeraydin.dev
-        </a>
-        <div className="flex items-center space-x-2 sm:space-x-4">
-          <span className={`uppercase tracking-wider text-xs sm:text-sm font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Total Sum</span>
-          <span className={`font-mono text-sm sm:text-xl font-bold px-2 sm:px-3 py-1 rounded-lg border shadow-inner transition-colors duration-200 ${isDarkMode ? 'text-emerald-400 bg-slate-900 border-slate-800' : 'text-emerald-600 bg-slate-50 border-slate-200'}`}>
-            {formatNumber(total)}
-          </span>
-        </div>
-      </footer>
-
-      {/* Custom Clear Confirmation Modal */}
-      {isClearModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className={`max-w-sm w-full p-6 rounded-xl shadow-2xl transform transition-all ${isDarkMode ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-200'}`}>
-            <h3 className={`text-lg font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-              Clear NoteCal?
-            </h3>
-            <p className={`mb-6 text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-              Are you sure you want to clear all your text and calculations? This action cannot be undone.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setIsClearModalOpen(false)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmClear}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-colors"
-              >
-                Clear All
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Instant Result Popup */}
       {popup.visible && (
