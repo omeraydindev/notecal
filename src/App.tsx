@@ -171,9 +171,9 @@ export default function App() {
         }
       }
       const isMobile = window.innerWidth < 768;
-      return isMobile ? 13 : 17;
+      return isMobile ? 12 : 16;
     }
-    return 17;
+    return 16;
   });
   const [isRenamingTab, setIsRenamingTab] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
