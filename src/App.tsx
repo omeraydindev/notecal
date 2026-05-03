@@ -170,6 +170,8 @@ export default function App() {
           return parsed;
         }
       }
+      const isMobile = window.innerWidth < 768;
+      return isMobile ? 13 : 17;
     }
     return 17;
   });
@@ -790,7 +792,7 @@ export default function App() {
         </div>
 
         {/* Results Panel Container */}
-        <div className={`w-40 md:w-56 h-full border-l shadow-inner transition-colors duration-200 ${isDarkMode ? 'bg-slate-800/40 border-slate-800/80' : 'bg-slate-100/50 border-slate-200'}`}>
+        <div className={`w-32 md:w-56 h-full border-l shadow-inner transition-colors duration-200 ${isDarkMode ? 'bg-slate-800/40 border-slate-800/80' : 'bg-slate-100/50 border-slate-200'}`}>
           {/* Results Panel Content */}
           <div
             ref={resultsRef}
