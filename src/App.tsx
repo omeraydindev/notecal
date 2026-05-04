@@ -704,6 +704,12 @@ export default function App() {
     const selectedText = view.state.doc.sliceString(selection.from, selection.to);
 
     if (selectedText && selection.from !== selection.to) {
+      // Skip popup for multiline selections
+      if (selectedText.includes('\n')) {
+        setPopup({ visible: false, x: 0, y: 0, result: '' });
+        return;
+      }
+
       // Skip popup for plain numbers (e.g., "32", "3.14", "-42")
       const isPlainNumber = /^-?\d+(\.\d+)?$/.test(selectedText.trim());
       if (isPlainNumber) {
