@@ -4,6 +4,25 @@ import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { mathLanguageExtension } from './mathLanguage';
 import { mathDarkTheme, mathLightTheme } from './mathTheme';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // Extend Window interface to include math.js
 declare global {
@@ -132,10 +151,6 @@ const loadInitialTabsState = (): StoredTabsState => {
   return { tabs: [tab], activeTabId: tab.id };
 };
 
-const getTabTitle = (tab: NoteTab, index: number) => {
-  return tab.title.trim() || getDefaultTabTitle(index);
-};
-
 const getNextNewNoteTitle = (tabs: NoteTab[]) => {
   const existingTitles = new Set(tabs.map((tab) => tab.title.trim()));
   if (!existingTitles.has('New Note')) return 'New Note';
@@ -153,6 +168,131 @@ const isMathDisplayObject = (value: MathEvaluationResult): value is MathDisplayO
   && value !== null
   && ('isUnit' in value || 'isComplex' in value || 'isFraction' in value)
 );
+
+interface SortableTabProps {
+  tab: NoteTab;
+  index: number;
+  isActive: boolean;
+  isDarkMode: boolean;
+  isRenaming: boolean;
+  renameDraft: string;
+  tabsLength: number;
+  onSelect: () => void;
+  onClose: () => void;
+  onBeginRename: () => void;
+  onRenameChange: (value: string) => void;
+  onRenameCommit: () => void;
+  onRenameCancel: () => void;
+  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  onKeyDown: (e: React.KeyboardEvent) => void;
+}
+
+function SortableTab({
+  tab,
+  index,
+  isActive,
+  isDarkMode,
+  isRenaming,
+  renameDraft,
+  tabsLength,
+  onSelect,
+  onClose,
+  onBeginRename,
+  onRenameChange,
+  onRenameCommit,
+  onRenameCancel,
+  renameInputRef,
+  onKeyDown,
+}: SortableTabProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: tab.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  const title = tab.title.trim() || (index === 0 ? 'New Note' : `New Note (${index + 1})`);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`group flex shrink-0 basis-22 sm:basis-26 items-center h-9 border-r text-sm transition-all duration-150 cursor-grab active:cursor-grabbing ${
+        isDragging
+          ? 'opacity-0'
+          : isActive
+            ? isDarkMode
+              ? 'bg-slate-900 border-slate-700 text-slate-100 shadow-[inset_0_2px_0_#10b981]'
+              : 'bg-white border-slate-300 text-slate-900 shadow-[inset_0_2px_0_#059669]'
+            : isDarkMode
+              ? 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+              : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-white hover:text-slate-800'
+      }`}
+    >
+      {isActive && isRenaming ? (
+        <input
+          ref={renameInputRef}
+          value={renameDraft}
+          onChange={(e) => onRenameChange(e.target.value)}
+          onBlur={onRenameCommit}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') {
+              onRenameCommit();
+            } else if (e.key === 'F2') {
+              e.preventDefault();
+              onBeginRename();
+            } else if (e.key === 'Escape') {
+              onRenameCancel();
+            }
+          }}
+          className={`min-w-0 flex-1 h-full px-3 bg-transparent outline-none ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}
+          aria-label="Rename current tab"
+        />
+      ) : (
+        <button
+          onClick={(event) => {
+            if (event.shiftKey && tabsLength > 1) {
+              onClose();
+              return;
+            }
+            onSelect();
+          }}
+          onDoubleClick={() => onBeginRename()}
+          onKeyDown={onKeyDown}
+          className={`min-w-0 flex-1 h-full px-3 ${tabsLength === 1 ? 'text-center' : 'text-left'}`}
+          title={`${title} (double-click or F2 to rename${tabsLength > 1 ? ', shift-click to close' : ''})`}
+        >
+          <span className="block truncate">{title}</span>
+        </button>
+      )}
+      {tabsLength > 1 && (
+        <button
+          aria-label={`Close ${title}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className={`mr-2 shrink-0 p-0.5 opacity-60 transition-colors group-hover:opacity-100 ${
+            isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'
+          }`}
+        >
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function App() {
   const [tabsState, setTabsState] = useState(loadInitialTabsState);
@@ -194,6 +334,9 @@ export default function App() {
     result: string;
   }>({ visible: false, x: 0, y: 0, result: '' });
 
+  // Drag and drop state
+  const [activeId, setActiveId] = useState<string | null>(null);
+
   const editorRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -202,6 +345,39 @@ export default function App() {
   const availableCurrencies = useRef<string[]>([]);
   const currencyFetchTriggered = useRef(false);
   const [currencyLoaded, setCurrencyLoaded] = useState(false);
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = tabs.findIndex((tab) => tab.id === active.id);
+    const newIndex = tabs.findIndex((tab) => tab.id === over.id);
+
+    if (oldIndex !== -1 && newIndex !== -1) {
+      setTabsState((current) => ({
+        ...current,
+        tabs: arrayMove(current.tabs, oldIndex, newIndex),
+      }));
+    }
+  };
 
   // Persist tabs to local storage whenever they change
   useEffect(() => {
@@ -663,76 +839,91 @@ export default function App() {
       </header>
 
       {/* Tabs */}
-      <div className={`flex items-stretch border-b overflow-x-auto no-scrollbar transition-colors duration-200 ${isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
-        {tabs.map((tab, index) => {
-          const isActive = tab.id === activeTabId;
-          const title = getTabTitle(tab, index);
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <div className={`flex items-stretch border-b overflow-x-auto no-scrollbar overscroll-x-none transition-colors duration-200 ${isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
+          <SortableContext
+            items={tabs.map((t) => t.id)}
+            strategy={horizontalListSortingStrategy}
+          >
+            {tabs.map((tab, index) => {
+              const isActive = tab.id === activeTabId;
 
-          return (
-            <div
-              key={tab.id}
-              className={`group flex shrink-0 basis-22 sm:basis-26 items-center h-9 border-r text-sm transition-colors ${isActive ? (isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-100 shadow-[inset_0_2px_0_#10b981]' : 'bg-white border-slate-300 text-slate-900 shadow-[inset_0_2px_0_#059669]') : (isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200' : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-white hover:text-slate-800')}`}
-            >
-              {isActive && isRenamingTab ? (
-                <input
-                  ref={renameInputRef}
-                  value={renameDraft}
-                  onChange={(event) => setRenameDraft(event.target.value)}
-                  onBlur={commitRenameActiveTab}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') commitRenameActiveTab();
-                    if (event.key === 'Escape') cancelRenameActiveTab();
+              return (
+                <SortableTab
+                  key={tab.id}
+                  tab={tab}
+                  index={index}
+                  isActive={isActive}
+                  isDarkMode={isDarkMode}
+                  isRenaming={isActive && isRenamingTab}
+                  renameDraft={renameDraft}
+                  tabsLength={tabs.length}
+                  onSelect={() => selectTab(tab.id)}
+                  onClose={() => closeTab(tab.id)}
+                  onBeginRename={() => beginRenameTab(tab.id, tab.title)}
+                  onRenameChange={setRenameDraft}
+                  onRenameCommit={commitRenameActiveTab}
+                  onRenameCancel={cancelRenameActiveTab}
+                  renameInputRef={renameInputRef}
+                  onKeyDown={(e) => {
+                    if (e.key === 'F2') {
+                      e.preventDefault();
+                      beginRenameTab(tab.id, tab.title);
+                    }
+                    if (e.key === 'Escape') {
+                      cancelRenameActiveTab();
+                    }
                   }}
-                  className={`min-w-0 flex-1 h-full px-3 bg-transparent outline-none ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}
-                  aria-label="Rename current tab"
                 />
-              ) : (
-                <button
-                  onClick={(event) => {
-                    if (event.shiftKey && tabs.length > 1) {
-                      closeTab(tab.id);
-                      return;
-                    }
+              );
+            })}
+          </SortableContext>
 
-                    selectTab(tab.id);
-                  }}
-                  onDoubleClick={() => {
-                    beginRenameTab(tab.id, title);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'F2') {
-                      event.preventDefault();
-                      beginRenameTab(tab.id, title);
-                    }
-                  }}
-                  className={`min-w-0 flex-1 h-full px-3 ${tabs.length === 1 ? 'text-center' : 'text-left'}`}
-                  title={`${title} (double-click or F2 to rename${tabs.length > 1 ? ', shift-click to close' : ''})`}
+          <button
+            onClick={addTab}
+            className={`shrink-0 flex items-center gap-1.5 h-9 px-3 text-sm transition-colors ${isDarkMode ? 'border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-emerald-300' : 'border-slate-200 text-slate-500 hover:bg-white hover:text-emerald-700'}`}
+            title="New note"
+          >
+            <Plus size={15} />
+          </button>
+
+        </div>
+
+        <DragOverlay dropAnimation={null}>
+          {activeId ? (
+            (() => {
+              const activeTab = tabs.find((t) => t.id === activeId);
+              const index = tabs.findIndex((t) => t.id === activeId);
+              if (!activeTab) return null;
+
+              const title = activeTab.title.trim() || (index === 0 ? 'New Note' : `New Note (${index + 1})`);
+
+              return (
+                <div
+                  className={`flex shrink-0 basis-22 sm:basis-26 items-center h-9 border-r text-sm ${
+                    isDarkMode
+                      ? 'bg-slate-800 border-slate-600 text-slate-100 shadow-2xl'
+                      : 'bg-white border-slate-400 text-slate-900 shadow-2xl'
+                  }`}
+                  style={{ transform: 'scale(1.05)', opacity: 0.95 }}
                 >
-                  <span className="block truncate">{title}</span>
-                </button>
-              )}
-              {tabs.length > 1 && (
-                <button
-                  aria-label={`Close ${title}`}
-                  onClick={() => closeTab(tab.id)}
-                  className={`mr-2 shrink-0 p-0.5 opacity-60 transition-colors group-hover:opacity-100 ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          );
-        })}
-
-        <button
-          onClick={addTab}
-          className={`shrink-0 flex items-center gap-1.5 h-9 px-3 text-sm transition-colors ${isDarkMode ? 'border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-emerald-300' : 'border-slate-200 text-slate-500 hover:bg-white hover:text-emerald-700'}`}
-          title="New note"
-        >
-          <Plus size={15} />
-        </button>
-
-      </div>
+                  <span className="min-w-0 flex-1 px-3 truncate">{title}</span>
+                  {tabs.length > 1 && (
+                    <div className={`mr-2 shrink-0 p-0.5 opacity-60 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <X size={14} />
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       {/* Main Workspace */}
       <main className="flex flex-1 overflow-hidden relative">
