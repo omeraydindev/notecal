@@ -17,6 +17,7 @@ savings = income - rent    // 3,800
 - Instant result popup on text selection
 - Syntax highlighting
 - Dark/light mode
+- Word wrapping
 - Auto-saves to localStorage
 
 Built with React, TypeScript, CodeMirror 6, and Math.js.

@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, type CSSProperties } from 'react';
-import { Calculator, Sun, Moon, ZoomIn, ZoomOut, Plus, X } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react';
+import { Calculator, Sun, Moon, ZoomIn, ZoomOut, Plus, X, WrapText } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { mathLanguageExtension } from './mathLanguage';
@@ -315,6 +315,13 @@ export default function App() {
     }
     return 16;
   });
+  const [wordWrap, setWordWrap] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('notecal-wordWrap');
+      return saved === 'true';
+    }
+    return false;
+  });
   const [isRenamingTab, setIsRenamingTab] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
   
@@ -345,6 +352,7 @@ export default function App() {
   const availableCurrencies = useRef<string[]>([]);
   const currencyFetchTriggered = useRef(false);
   const [currencyLoaded, setCurrencyLoaded] = useState(false);
+  const [visualLineCounts, setVisualLineCounts] = useState<number[]>([]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -396,6 +404,12 @@ export default function App() {
       localStorage.setItem('notecal-fontSize', fontSize.toString());
     }
   }, [fontSize]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('notecal-wordWrap', wordWrap.toString());
+    }
+  }, [wordWrap]);
 
   // Dynamically load Math.js from CDN for robust and safe evaluation
   useEffect(() => {
@@ -767,6 +781,19 @@ export default function App() {
     '--stripe-color': stripeColor,
   } as CSSProperties;
 
+  const visualResults = useMemo(() => {
+    if (!wordWrap || visualLineCounts.length === 0) return results;
+    const expanded: Result[] = [];
+    results.forEach((res, i) => {
+      const count = visualLineCounts[i] || 1;
+      expanded.push(res);
+      for (let j = 1; j < count; j++) {
+        expanded.push({ text: '', value: null });
+      }
+    });
+    return expanded;
+  }, [results, wordWrap, visualLineCounts]);
+
   // Create EditorView theme to force exact line height matching stripes
   const editorTheme = EditorView.theme({
     '.cm-content': {
@@ -790,6 +817,44 @@ export default function App() {
       handleSelectionChange(update.view);
     }
   });
+
+  const updateVisualLineCounts = useCallback(() => {
+    if (!wordWrap) {
+      setVisualLineCounts([]);
+      return;
+    }
+    const editorContainer = editorRef.current;
+    if (!editorContainer) return;
+    const scroller = editorContainer.querySelector('.cm-scroller');
+    if (!scroller) return;
+    const cmLines = scroller.querySelectorAll('.cm-line');
+    const counts: number[] = [];
+    cmLines.forEach((lineEl) => {
+      const height = lineEl.getBoundingClientRect().height;
+      const count = Math.max(1, Math.round(height / lineHeight));
+      counts.push(count);
+    });
+    setVisualLineCounts(counts);
+  }, [wordWrap, lineHeight]);
+
+  useEffect(() => {
+    const scroller = editorRef.current?.querySelector('.cm-scroller');
+    if (!scroller) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateVisualLineCounts();
+    });
+
+    resizeObserver.observe(scroller);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [updateVisualLineCounts]);
+
+  useEffect(() => {
+    updateVisualLineCounts();
+  }, [results, updateVisualLineCounts]);
 
   return (
     <div className={`flex flex-col h-screen font-sans transition-colors duration-200 ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
@@ -831,6 +896,23 @@ export default function App() {
               <ZoomIn size={17} />
             </button>
           </div>
+
+          {/* Word Wrap Toggle */}
+          <button
+            onClick={() => setWordWrap(!wordWrap)}
+            className={`p-2.5 rounded-lg border transition-colors ${
+              wordWrap
+                ? isDarkMode
+                  ? 'border-emerald-700 bg-emerald-900/30 text-emerald-400'
+                  : 'border-emerald-300 bg-emerald-50 text-emerald-600'
+                : isDarkMode
+                  ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700'
+                  : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'
+            }`}
+            title="Toggle Word Wrap"
+          >
+            <WrapText size={17} />
+          </button>
 
           {/* Theme Toggle */}
           <button
@@ -958,6 +1040,7 @@ export default function App() {
               mathLanguageExtension,
               editorTheme,
               selectionExtension,
+              ...(wordWrap ? [EditorView.lineWrapping] : []),
             ]}
             basicSetup={{
               lineNumbers: false,
@@ -996,11 +1079,11 @@ export default function App() {
             style={sharedStyle}
             className={`w-full h-full px-4 md:px-6 overflow-hidden no-scrollbar font-mono text-right transition-colors duration-200 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}
           >
-            {results.map((res, i) => (
-              <div key={i} style={{ height: lineHeight }} className="truncate pr-2 tracking-wide font-medium">
-                {res.text}
-              </div>
-            ))}
+             {visualResults.map((res, i) => (
+               <div key={i} style={{ height: lineHeight }} className="truncate pr-2 tracking-wide font-medium">
+                 {res.text}
+               </div>
+             ))}
           </div>
         </div>
       </main>
