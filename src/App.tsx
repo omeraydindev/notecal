@@ -994,7 +994,7 @@ export default function App() {
           <div
             ref={resultsRef}
             style={sharedStyle}
-            className={`w-full h-full px-4 md:px-6 overflow-hidden no-scrollbar font-mono text-right select-none pointer-events-none transition-colors duration-200 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}
+            className={`w-full h-full px-4 md:px-6 overflow-hidden no-scrollbar font-mono text-right transition-colors duration-200 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}
           >
             {results.map((res, i) => (
               <div key={i} style={{ height: lineHeight }} className="truncate pr-2 tracking-wide font-medium">
