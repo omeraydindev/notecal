@@ -21,6 +21,8 @@
 - This is a single-package React 19 + TypeScript + Vite app; the runtime entrypoint is `src/main.tsx`, and nearly all UI/evaluation behavior lives in `src/App.tsx`.
 - `src/mathLanguage.ts` defines the custom CodeMirror stream language for NoteCal syntax, while `src/mathTheme.ts` defines light/dark CodeMirror themes.
 - Tailwind CSS v4 is wired through `@tailwindcss/vite` in `vite.config.ts` and imported from `src/index.css`; there is no separate Tailwind config file.
+- Google OAuth + Drive sync is provided by `src/auth.tsx` (`GoogleAuthProvider`, `useGoogleAuth`), `src/drive.ts` (Drive API save/load), and `src/usePreventLeave.ts` (blocks tab close during sync). The client ID comes from `VITE_GOOGLE_CLIENT_ID` env var, wired in `src/main.tsx`. The entire flow is client-side, no backend needed.
+- Tooltips use `react-tooltip` via a shared `<Tooltip id="header-tooltip">` in `App.tsx`; anchor elements use `data-tooltip-id` + `data-tooltip-content`.
 
 ## Runtime Gotchas
 - Math evaluation depends on loading Math.js from `https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js` at runtime; it is intentionally not imported from npm.

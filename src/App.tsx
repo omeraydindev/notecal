@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react';
-import { Calculator, Sun, Moon, ZoomIn, ZoomOut, Plus, X, WrapText } from 'lucide-react';
+import { Tooltip } from 'react-tooltip';
+import { Calculator, Sun, Moon, ZoomIn, ZoomOut, Plus, X, WrapText, LogIn, LogOut, Cloud, Loader2 } from 'lucide-react';
+import { useGoogleAuth } from './auth';
+import { saveToDrive, loadFromDrive } from './drive';
+import usePreventLeave from './usePreventLeave';
+import type { NoteTab, StoredTabsState } from './types';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { mathLanguageExtension } from './mathLanguage';
@@ -49,17 +54,6 @@ interface MathApi {
 interface Result {
   text: string;
   value: number | null;
-}
-
-interface NoteTab {
-  id: string;
-  title: string;
-  text: string;
-}
-
-interface StoredTabsState {
-  tabs: NoteTab[];
-  activeTabId: string;
 }
 
 const TABS_STORAGE_KEY = 'notecal-tabs';
@@ -353,6 +347,72 @@ export default function App() {
   const currencyFetchTriggered = useRef(false);
   const [currencyLoaded, setCurrencyLoaded] = useState(false);
   const [visualLineCounts, setVisualLineCounts] = useState<number[]>([]);
+  const { token, isSignedIn, isLoading, signIn, signOut } = useGoogleAuth();
+  const [syncState, setSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const autoSaveRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const isFirstRender = useRef(true);
+  const driveLoadedRef = useRef(false);
+  const [isInitialSync, setIsInitialSync] = useState(false);
+
+  usePreventLeave(syncState === 'saving' || isInitialSync);
+
+  const doSave = useCallback(async (state: StoredTabsState) => {
+    if (!token) return;
+    try {
+      await saveToDrive(token, state);
+      setSyncState('saved');
+    } catch {
+      setSyncState('error');
+    }
+  }, [token]);
+
+  const saveNow = () => {
+    if (!token) { signIn(); return; }
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    setSyncState('saving');
+    doSave(tabsState);
+  };
+
+  // Load from Drive on sign-in
+  useEffect(() => {
+    if (!token || !isSignedIn || driveLoadedRef.current) return;
+    driveLoadedRef.current = true;
+
+    const load = async () => {
+      setIsInitialSync(true);
+      try {
+        const data = await loadFromDrive(token);
+        if (data) setTabsState(data);
+      } catch {
+        // first sync may fail if no file or network issue
+      } finally {
+        setIsInitialSync(false);
+      }
+    };
+
+    load();
+  }, [token, isSignedIn, setTabsState]);
+
+  useEffect(() => {
+    if (syncState === 'saved' || syncState === 'error') {
+      const t = setTimeout(() => setSyncState('idle'), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [syncState]);
+
+  // Auto-save on changes
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (!token || !isSignedIn || !driveLoadedRef.current) return;
+
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => {
+      setSyncState('saving');
+      doSave(tabsState);
+    }, 1500);
+
+    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
+  }, [tabsState, token, isSignedIn, doSave]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -810,8 +870,6 @@ export default function App() {
     },
   });
 
-  // Create extension for selection change handling
-  // eslint-disable-next-line react-hooks/refs -- CodeMirror invokes this callback after render as an editor update listener.
   const selectionExtension = EditorView.updateListener.of((update) => {
     if (update.selectionSet && update.view) {
       handleSelectionChange(update.view);
@@ -874,24 +932,77 @@ export default function App() {
         </div>
         
         <div className="flex items-center space-x-2.5">
-          {!isMathLoaded && (
-            <span className="text-sm text-slate-400 animate-pulse hidden sm:inline mr-2">Loading Math Engine...</span>
+          {/* Auth / Drive controls */}
+          {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+            <>
+              {!isLoading && !isSignedIn && (
+                <button
+                  onClick={signIn}
+                  data-tooltip-id="header-tooltip"
+                  data-tooltip-content="Sign in with Google to sync notes to Drive"
+                  className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
+                >
+                  <LogIn size={17} />
+                </button>
+              )}
+
+              {isSignedIn && (
+                <>
+                  <button
+                    onClick={saveNow}
+                    className={`p-2.5 rounded-lg border transition-colors duration-1000 ${
+                      isDarkMode
+                        ? 'border-slate-800 bg-slate-900 hover:text-emerald-400 hover:border-slate-700'
+                        : 'border-slate-200 bg-slate-100 hover:text-emerald-600 hover:border-slate-300'
+                    } ${
+                      syncState === 'error'
+                        ? 'text-red-400'
+                        : syncState !== 'idle'
+                          ? 'text-emerald-400'
+                          : isDarkMode
+                            ? 'text-slate-400'
+                            : 'text-slate-500'
+                    }`}
+                    data-tooltip-id="header-tooltip"
+                    data-tooltip-content={syncState === 'error' ? 'Sync failed' : (syncState === 'saving' || isInitialSync) ? 'Syncing...' : 'Synced to Drive'}
+                  >
+                    {syncState === 'saving' || isInitialSync ? (
+                      <Loader2 size={17} className="animate-spin" />
+                    ) : (
+                      <Cloud size={17} />
+                    )}
+                  </button>
+                  <button
+                    onClick={signOut}
+                    className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-red-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-red-600 hover:border-slate-300'}`}
+                    data-tooltip-id="header-tooltip"
+                    data-tooltip-content="Sign out"
+                  >
+                    <LogOut size={17} />
+                  </button>
+                </>
+              )}
+
+              <div className={`w-px h-6 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`} />
+            </>
           )}
 
           {/* Font Size Controls */}
           <div className={`flex items-center rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:border-slate-300'}`}>
             <button
               onClick={() => setFontSize(Math.max(10, fontSize - 1))}
+              data-tooltip-id="header-tooltip"
+              data-tooltip-content="Decrease font size"
               className={`p-2.5 rounded-l-lg transition-colors ${isDarkMode ? 'hover:text-emerald-400' : 'hover:text-emerald-600'}`}
-              title="Decrease Font Size"
             >
               <ZoomOut size={17} />
             </button>
             <div className={`w-px h-4 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`}></div>
             <button
               onClick={() => setFontSize(Math.min(32, fontSize + 1))}
+              data-tooltip-id="header-tooltip"
+              data-tooltip-content="Increase font size"
               className={`p-2.5 rounded-r-lg transition-colors ${isDarkMode ? 'hover:text-emerald-400' : 'hover:text-emerald-600'}`}
-              title="Increase Font Size"
             >
               <ZoomIn size={17} />
             </button>
@@ -909,7 +1020,8 @@ export default function App() {
                   ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700'
                   : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'
             }`}
-            title="Toggle Word Wrap"
+            data-tooltip-id="header-tooltip"
+            data-tooltip-content="Toggle word wrap"
           >
             <WrapText size={17} />
           </button>
@@ -918,7 +1030,8 @@ export default function App() {
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
-            title="Toggle Theme"
+            data-tooltip-id="header-tooltip"
+            data-tooltip-content="Toggle theme"
           >
             {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
           </button>
@@ -974,8 +1087,9 @@ export default function App() {
 
           <button
             onClick={addTab}
+            data-tooltip-id="header-tooltip"
+            data-tooltip-content="New note"
             className={`shrink-0 flex items-center gap-1.5 h-9 px-3 text-sm transition-colors ${isDarkMode ? 'border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-emerald-300' : 'border-slate-200 text-slate-500 hover:bg-white hover:text-emerald-700'}`}
-            title="New note"
           >
             <Plus size={15} />
           </button>
@@ -1100,6 +1214,14 @@ export default function App() {
           = {popup.result}
         </div>
       )}
+
+      <Tooltip
+        id="header-tooltip"
+        place="bottom"
+        offset={8}
+        className={`!text-[13px] !px-1 !py-0.5 !z-[60] ${isDarkMode ? '!bg-slate-800 !text-slate-100' : '!bg-white !text-slate-900 !border !border-slate-300'}`}
+        noArrow
+      />
     </div>
   );
 }
