@@ -414,10 +414,16 @@ export default function App() {
     }
   }, [syncState]);
 
-  // Auto-save on changes
+  const prevContentKeyRef = useRef('');
+
+  // Auto-save on content changes (not on tab switches that only change activeTabId)
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     if (!token || !isSignedIn || !driveLoadedRef.current) return;
+
+    const contentKey = JSON.stringify(tabsState.tabs);
+    if (prevContentKeyRef.current === contentKey) return;
+    prevContentKeyRef.current = contentKey;
 
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
     autoSaveRef.current = setTimeout(() => {
