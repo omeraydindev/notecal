@@ -89,6 +89,7 @@ const createTab = (text = '', title = 'New Note'): NoteTab => ({
   id: createTabId(),
   title,
   text,
+  lastModified: Date.now(),
 });
 
 const normalizeTab = (tab: unknown, index: number): NoteTab | null => {
@@ -102,6 +103,7 @@ const normalizeTab = (tab: unknown, index: number): NoteTab | null => {
       ? candidate.title.trim()
       : getDefaultTabTitle(index),
     text: candidate.text,
+    lastModified: typeof candidate.lastModified === 'number' ? candidate.lastModified : 0,
   };
 };
 
@@ -120,7 +122,11 @@ const normalizeTabsState = (state: unknown): StoredTabsState | null => {
     ? (candidate.activeTabId as string)
     : tabs[0].id;
 
-  return { tabs, activeTabId };
+  return {
+    tabs,
+    activeTabId,
+    updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : 0,
+  };
 };
 
 const loadInitialTabsState = (): StoredTabsState => {
@@ -138,11 +144,11 @@ const loadInitialTabsState = (): StoredTabsState => {
     const legacyText = localStorage.getItem(LEGACY_TEXT_STORAGE_KEY);
     const text = legacyText ?? INITIAL_TEXT;
     const tab = createTab(text, 'New Note');
-    return { tabs: [tab], activeTabId: tab.id };
+    return { tabs: [tab], activeTabId: tab.id, updatedAt: Date.now() };
   }
 
   const tab = createTab(INITIAL_TEXT, 'New Note');
-  return { tabs: [tab], activeTabId: tab.id };
+  return { tabs: [tab], activeTabId: tab.id, updatedAt: Date.now() };
 };
 
 const getNextNewNoteTitle = (tabs: NoteTab[]) => {
@@ -373,7 +379,8 @@ export default function App() {
   const doSave = useCallback(async (state: StoredTabsState) => {
     if (!token) return;
     try {
-      await saveToDrive(token, state);
+      const merged = await saveToDrive(token, state);
+      setTabsState(merged);
       setSyncState('saved');
     } catch {
       setSyncState('error');
@@ -728,7 +735,7 @@ export default function App() {
     setTabsState((current) => ({
       ...current,
       tabs: current.tabs.map((tab) => (
-        tab.id === current.activeTabId ? { ...tab, text: nextText } : tab
+        tab.id === current.activeTabId ? { ...tab, text: nextText, lastModified: Date.now() } : tab
       )),
     }));
   };
@@ -745,7 +752,7 @@ export default function App() {
     setTabsState((current) => ({
       ...current,
       tabs: current.tabs.map((tab) => (
-        tab.id === current.activeTabId ? { ...tab, title: nextTitle } : tab
+        tab.id === current.activeTabId ? { ...tab, title: nextTitle, lastModified: Date.now() } : tab
       )),
     }));
     setIsRenamingTab(false);
@@ -768,6 +775,7 @@ export default function App() {
       const tab = createTab('', getNextNewNoteTitle(current.tabs));
 
       return {
+        ...current,
         tabs: [...current.tabs, tab],
         activeTabId: tab.id,
       };
@@ -788,7 +796,7 @@ export default function App() {
         ? nextTabs[Math.max(0, tabIndex - 1)].id
         : current.activeTabId;
 
-      return { tabs: nextTabs, activeTabId: nextActiveTabId };
+      return { ...current, tabs: nextTabs, activeTabId: nextActiveTabId };
     });
   };
 
