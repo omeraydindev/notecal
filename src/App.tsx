@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react';
 import { Tooltip } from 'react-tooltip';
-import { Calculator, Sun, Moon, ZoomIn, ZoomOut, Plus, X, WrapText, LogIn, LogOut, Cloud, Loader2 } from 'lucide-react';
+import { Calculator, Sun, Moon, ZoomIn, ZoomOut, Plus, X, WrapText, LogIn, LogOut, Cloud, Loader2, MoreHorizontal } from 'lucide-react';
 import { useGoogleAuth } from './auth';
 import { saveToDrive, loadFromDrive } from './drive';
 import usePreventLeave from './usePreventLeave';
@@ -353,6 +353,20 @@ export default function App() {
   const isFirstRender = useRef(true);
   const driveLoadedRef = useRef(false);
   const [isInitialSync, setIsInitialSync] = useState(false);
+  const [isOverflowOpen, setIsOverflowOpen] = useState(false);
+  const overflowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setIsOverflowOpen(false);
+      }
+    };
+    if (isOverflowOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOverflowOpen]);
 
   usePreventLeave(syncState === 'saving' || isInitialSync);
 
@@ -983,58 +997,104 @@ export default function App() {
                 </>
               )}
 
-              <div className={`w-px h-6 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`} />
+              <div className={`hidden md:block w-px h-6 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`} />
             </>
           )}
 
-          {/* Font Size Controls */}
-          <div className={`flex items-center rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:border-slate-300'}`}>
+          {/* Desktop inline controls */}
+          <div className="hidden md:flex items-center space-x-2.5">
+            <div className={`flex items-center rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:border-slate-300'}`}>
+              <button
+                onClick={() => setFontSize(Math.max(10, fontSize - 1))}
+                data-tooltip-id="header-tooltip"
+                data-tooltip-content="Decrease font size"
+                className={`p-2.5 rounded-l-lg transition-colors ${isDarkMode ? 'hover:text-emerald-400' : 'hover:text-emerald-600'}`}
+              >
+                <ZoomOut size={17} />
+              </button>
+              <div className={`w-px h-4 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`}></div>
+              <button
+                onClick={() => setFontSize(Math.min(32, fontSize + 1))}
+                data-tooltip-id="header-tooltip"
+                data-tooltip-content="Increase font size"
+                className={`p-2.5 rounded-r-lg transition-colors ${isDarkMode ? 'hover:text-emerald-400' : 'hover:text-emerald-600'}`}
+              >
+                <ZoomIn size={17} />
+              </button>
+            </div>
+
             <button
-              onClick={() => setFontSize(Math.max(10, fontSize - 1))}
+              onClick={() => setWordWrap(!wordWrap)}
+              className={`p-2.5 rounded-lg border transition-colors ${
+                wordWrap
+                  ? isDarkMode
+                    ? 'border-emerald-700 bg-emerald-900/30 text-emerald-400'
+                    : 'border-emerald-300 bg-emerald-50 text-emerald-600'
+                  : isDarkMode
+                    ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700'
+                    : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'
+              }`}
               data-tooltip-id="header-tooltip"
-              data-tooltip-content="Decrease font size"
-              className={`p-2.5 rounded-l-lg transition-colors ${isDarkMode ? 'hover:text-emerald-400' : 'hover:text-emerald-600'}`}
+              data-tooltip-content="Toggle word wrap"
             >
-              <ZoomOut size={17} />
+              <WrapText size={17} />
             </button>
-            <div className={`w-px h-4 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`}></div>
+
             <button
-              onClick={() => setFontSize(Math.min(32, fontSize + 1))}
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
               data-tooltip-id="header-tooltip"
-              data-tooltip-content="Increase font size"
-              className={`p-2.5 rounded-r-lg transition-colors ${isDarkMode ? 'hover:text-emerald-400' : 'hover:text-emerald-600'}`}
+              data-tooltip-content="Toggle theme"
             >
-              <ZoomIn size={17} />
+              {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
             </button>
           </div>
 
-          {/* Word Wrap Toggle */}
-          <button
-            onClick={() => setWordWrap(!wordWrap)}
-            className={`p-2.5 rounded-lg border transition-colors ${
-              wordWrap
-                ? isDarkMode
-                  ? 'border-emerald-700 bg-emerald-900/30 text-emerald-400'
-                  : 'border-emerald-300 bg-emerald-50 text-emerald-600'
-                : isDarkMode
-                  ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700'
-                  : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'
-            }`}
-            data-tooltip-id="header-tooltip"
-            data-tooltip-content="Toggle word wrap"
-          >
-            <WrapText size={17} />
-          </button>
-
-          {/* Theme Toggle */}
-          <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
-            data-tooltip-id="header-tooltip"
-            data-tooltip-content="Toggle theme"
-          >
-            {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
+          {/* Mobile overflow menu */}
+          <div className="relative flex md:hidden" ref={overflowRef}>
+            <button
+              onClick={() => setIsOverflowOpen((v) => !v)}
+              className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
+            >
+              <MoreHorizontal size={17} />
+            </button>
+            {isOverflowOpen && (
+              <div className={`absolute top-full right-0 mt-1.5 py-1.5 rounded-lg border shadow-lg flex flex-col z-50 min-w-[190px] whitespace-nowrap ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
+                <button
+                  onClick={() => setFontSize(Math.min(32, fontSize + 1))}
+                  className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
+                >
+                  <ZoomIn size={16} /> Increase font size
+                </button>
+                <button
+                  onClick={() => setFontSize(Math.max(10, fontSize - 1))}
+                  className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
+                >
+                  <ZoomOut size={16} /> Decrease font size
+                </button>
+                <button
+                  onClick={() => setWordWrap(!wordWrap)}
+                  className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${
+                    wordWrap
+                      ? isDarkMode
+                        ? 'text-emerald-400 hover:bg-slate-800 active:bg-slate-700'
+                        : 'text-emerald-700 hover:bg-slate-100 active:bg-slate-200'
+                      : isDarkMode
+                        ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300'
+                        : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'
+                  }`}
+                >
+                  <WrapText size={16} /> {wordWrap ? 'Word wrap on' : 'Word wrap off'}
+                </button>
+                <button
+                  onClick={() => setIsDarkMode(!isDarkMode)}
+                  className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
+                >
+                  {isDarkMode ? <Sun size={16} /> : <Moon size={16} />} {isDarkMode ? 'Light theme' : 'Dark theme'}
+                </button>
+              </div>
+            )}
+          </div>
 
         </div>
       </header>
