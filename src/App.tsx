@@ -1087,8 +1087,6 @@ export default function App() {
 
           <button
             onClick={addTab}
-            data-tooltip-id="header-tooltip"
-            data-tooltip-content="New note"
             className={`shrink-0 flex items-center gap-1.5 h-9 px-3 text-sm transition-colors ${isDarkMode ? 'border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-emerald-300' : 'border-slate-200 text-slate-500 hover:bg-white hover:text-emerald-700'}`}
           >
             <Plus size={15} />

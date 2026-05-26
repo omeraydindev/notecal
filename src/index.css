@@ -42,3 +42,10 @@
   background-attachment: local !important;
   will-change: scroll-position;
 }
+
+/* Hide tooltips on touch-only devices */
+@media (hover: none) and (pointer: coarse) {
+  .react-tooltip {
+    display: none !important;
+  }
+}
