@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react';
 import { Tooltip } from 'react-tooltip';
-import { Calculator, Sun, Moon, ZoomIn, ZoomOut, Plus, X, WrapText, LogIn, LogOut, Cloud, Loader2, MoreHorizontal } from 'lucide-react';
+import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, LogIn, LogOut, Cloud, Loader2, MoreHorizontal } from 'lucide-react';
 import { useGoogleAuth } from './auth';
 import { saveToDrive, loadFromDrive } from './drive';
 import usePreventLeave from './usePreventLeave';
@@ -325,13 +325,32 @@ export default function App() {
   const [isRenamingTab, setIsRenamingTab] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
   
-  // Default to system theme preferences
-  const [isDarkMode, setIsDarkMode] = useState(() => {
+  // Theme mode: 'device' follows system, 'light'/'dark' are explicit
+  const [themeMode, setThemeMode] = useState<'device' | 'light' | 'dark'>('device');
+  const [systemDark, setSystemDark] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
-    return true;
+    return false;
   });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const isDarkMode = themeMode === 'device' ? systemDark : themeMode === 'dark';
+
+  const cycleTheme = useCallback(() => {
+    setThemeMode(prev => {
+      if (prev === 'device') return 'light';
+      if (prev === 'light') return 'dark';
+      return 'device';
+    });
+  }, []);
 
   // Popup state for instant expression results
   const [popup, setPopup] = useState<{
@@ -975,7 +994,7 @@ export default function App() {
                 <>
                   <button type="button"
                     onClick={saveNow}
-                    className={`p-2.5 rounded-lg border transition-colors duration-1000 ${
+                    className={`p-2.5 rounded-lg border transition-colors duration-200 ${
                       isDarkMode
                         ? 'border-slate-800 bg-slate-900 hover:text-emerald-400 hover:border-slate-700'
                         : 'border-slate-200 bg-slate-100 hover:text-emerald-600 hover:border-slate-300'
@@ -1052,12 +1071,12 @@ export default function App() {
             </button>
 
             <button type="button"
-              onClick={() => setIsDarkMode(!isDarkMode)}
+              onClick={cycleTheme}
               className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
               data-tooltip-id="header-tooltip"
-              data-tooltip-content="Toggle theme"
+              data-tooltip-content={themeMode === 'device' ? 'System theme' : themeMode === 'light' ? 'Light theme' : 'Dark theme'}
             >
-              {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
+              {themeMode === 'device' ? <Monitor size={17} /> : themeMode === 'light' ? <Sun size={17} /> : <Moon size={17} />}
             </button>
           </div>
 
@@ -1098,10 +1117,10 @@ export default function App() {
                   <WrapText size={16} /> {wordWrap ? 'Word wrap on' : 'Word wrap off'}
                 </button>
                 <button type="button"
-                  onClick={() => setIsDarkMode(!isDarkMode)}
+                  onClick={cycleTheme}
                   className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
                 >
-                  {isDarkMode ? <Sun size={16} /> : <Moon size={16} />} {isDarkMode ? 'Light theme' : 'Dark theme'}
+                  {themeMode === 'device' ? <Monitor size={16} /> : themeMode === 'light' ? <Sun size={16} /> : <Moon size={16} />} {themeMode === 'device' ? 'System theme' : themeMode === 'light' ? 'Light theme' : 'Dark theme'}
                 </button>
               </div>
             )}
