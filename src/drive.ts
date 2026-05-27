@@ -40,7 +40,9 @@ async function downloadContent(token: string, fileId: string): Promise<StoredTab
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error('Failed to download from Drive');
-  const data: unknown = await res.json();
+  const text = await res.text();
+  if (!text) return null;
+  const data: unknown = JSON.parse(text);
   return data as StoredTabsState;
 }
 
