@@ -260,7 +260,7 @@ function SortableTab({
           aria-label="Rename current tab"
         />
       ) : (
-        <button
+        <button type="button"
           onClick={(event) => {
             if (event.shiftKey && tabsLength > 1) {
               onClose();
@@ -277,7 +277,7 @@ function SortableTab({
         </button>
       )}
       {tabsLength > 1 && (
-        <button
+        <button type="button"
           aria-label={`Close ${title}`}
           onClick={(e) => {
             e.stopPropagation();
@@ -300,7 +300,7 @@ export default function App() {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const text = activeTab?.text ?? '';
   const [results, setResults] = useState<Result[]>([]);
-  const [isMathLoaded, setIsMathLoaded] = useState(false);
+  const [isMathLoaded, setIsMathLoaded] = useState(() => !!(typeof window !== 'undefined' && window.math));
   const [fontSize, setFontSize] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('notecal-fontSize');
@@ -500,10 +500,7 @@ export default function App() {
 
   // Dynamically load Math.js from CDN for robust and safe evaluation
   useEffect(() => {
-    if (window.math) {
-      setIsMathLoaded(true);
-      return;
-    }
+    if (window.math) return;
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js';
     script.async = true;
@@ -952,19 +949,19 @@ export default function App() {
 
       {/* Header */}
       <header className={`flex items-center justify-between px-5 sm:px-6 py-2.5 border-b shadow-sm z-10 transition-colors duration-200 ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-x-3">
           <div className="p-1.5 bg-emerald-500/20 text-emerald-500 rounded-lg">
             <Calculator size={22} />
           </div>
           <h1 className={`text-lg font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>NoteCal</h1>
         </div>
         
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center gap-x-2.5">
           {/* Auth / Drive controls */}
           {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
             <>
               {!isLoading && !isSignedIn && (
-                <button
+                <button type="button"
                   onClick={signIn}
                   data-tooltip-id="header-tooltip"
                   data-tooltip-content="Sign in with Google to sync notes to Drive"
@@ -976,7 +973,7 @@ export default function App() {
 
               {isSignedIn && (
                 <>
-                  <button
+                  <button type="button"
                     onClick={saveNow}
                     className={`p-2.5 rounded-lg border transition-colors duration-1000 ${
                       isDarkMode
@@ -1000,7 +997,7 @@ export default function App() {
                       <Cloud size={17} />
                     )}
                   </button>
-                  <button
+                  <button type="button"
                     onClick={signOut}
                     className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-red-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-red-600 hover:border-slate-300'}`}
                     data-tooltip-id="header-tooltip"
@@ -1016,9 +1013,9 @@ export default function App() {
           )}
 
           {/* Desktop inline controls */}
-          <div className="hidden md:flex items-center space-x-2.5">
+          <div className="hidden md:flex items-center gap-x-2.5">
             <div className={`flex items-center rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:border-slate-300'}`}>
-              <button
+              <button type="button"
                 onClick={() => setFontSize(Math.max(10, fontSize - 1))}
                 data-tooltip-id="header-tooltip"
                 data-tooltip-content="Decrease font size"
@@ -1027,7 +1024,7 @@ export default function App() {
                 <ZoomOut size={17} />
               </button>
               <div className={`w-px h-4 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`}></div>
-              <button
+              <button type="button"
                 onClick={() => setFontSize(Math.min(32, fontSize + 1))}
                 data-tooltip-id="header-tooltip"
                 data-tooltip-content="Increase font size"
@@ -1037,7 +1034,7 @@ export default function App() {
               </button>
             </div>
 
-            <button
+            <button type="button"
               onClick={() => setWordWrap(!wordWrap)}
               className={`p-2.5 rounded-lg border transition-colors ${
                 wordWrap
@@ -1054,7 +1051,7 @@ export default function App() {
               <WrapText size={17} />
             </button>
 
-            <button
+            <button type="button"
               onClick={() => setIsDarkMode(!isDarkMode)}
               className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
               data-tooltip-id="header-tooltip"
@@ -1066,7 +1063,7 @@ export default function App() {
 
           {/* Mobile overflow menu */}
           <div className="relative flex md:hidden" ref={overflowRef}>
-            <button
+            <button type="button"
               onClick={() => setIsOverflowOpen((v) => !v)}
               className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
             >
@@ -1074,19 +1071,19 @@ export default function App() {
             </button>
             {isOverflowOpen && (
               <div className={`absolute top-full right-0 mt-1.5 py-1.5 rounded-lg border shadow-lg flex flex-col z-50 min-w-[190px] whitespace-nowrap ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
-                <button
+                <button type="button"
                   onClick={() => setFontSize(Math.min(32, fontSize + 1))}
                   className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
                 >
                   <ZoomIn size={16} /> Increase font size
                 </button>
-                <button
+                <button type="button"
                   onClick={() => setFontSize(Math.max(10, fontSize - 1))}
                   className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
                 >
                   <ZoomOut size={16} /> Decrease font size
                 </button>
-                <button
+                <button type="button"
                   onClick={() => setWordWrap(!wordWrap)}
                   className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${
                     wordWrap
@@ -1100,7 +1097,7 @@ export default function App() {
                 >
                   <WrapText size={16} /> {wordWrap ? 'Word wrap on' : 'Word wrap off'}
                 </button>
-                <button
+                <button type="button"
                   onClick={() => setIsDarkMode(!isDarkMode)}
                   className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
                 >
@@ -1159,7 +1156,7 @@ export default function App() {
             })}
           </SortableContext>
 
-          <button
+          <button type="button"
             onClick={addTab}
             className={`shrink-0 flex items-center gap-1.5 h-9 px-3 text-sm transition-colors ${isDarkMode ? 'border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-emerald-300' : 'border-slate-200 text-slate-500 hover:bg-white hover:text-emerald-700'}`}
           >

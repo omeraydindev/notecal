@@ -1,5 +1,4 @@
 import { StreamLanguage, type StringStream } from '@codemirror/language';
-import { tags as t } from '@lezer/highlight';
 
 // Define the math notation language
 const mathNotation = {
@@ -70,12 +69,3 @@ const mathNotation = {
 // Create the language extension
 export const mathLanguageExtension = StreamLanguage.define(mathNotation);
 
-// Export tag styles for syntax highlighting
-export const mathHighlightStyle = [
-  { tag: t.comment, class: 'cm-comment' },
-  { tag: t.number, class: 'cm-number' },
-  { tag: t.function(t.variableName), class: 'cm-function' },
-  { tag: t.variableName, class: 'cm-variable' },
-  { tag: t.operator, class: 'cm-operator' },
-  { tag: t.unit, class: 'cm-unit' },
-];
