@@ -21,7 +21,7 @@
 - This is a single-package React 19 + TypeScript + Vite app; the runtime entrypoint is `src/main.tsx`, and nearly all UI/evaluation behavior lives in `src/App.tsx`.
 - `src/mathLanguage.ts` defines the custom CodeMirror stream language for NoteCal syntax, while `src/mathTheme.ts` defines light/dark CodeMirror themes.
 - Tailwind CSS v4 is wired through `@tailwindcss/vite` in `vite.config.ts` and imported from `src/index.css`; there is no separate Tailwind config file.
-- Google OAuth + Drive sync is provided by `src/auth.tsx` (`GoogleAuthProvider`, `useGoogleAuth`), `src/drive.ts` (Drive API save/load), and `src/usePreventLeave.ts` (blocks tab close during sync). The client ID comes from `VITE_GOOGLE_CLIENT_ID` env var, wired in `src/main.tsx`. The entire flow is client-side, no backend needed.
+- Google OAuth + Drive sync is provided by `src/auth.tsx` (`GoogleAuthProvider`, `useGoogleAuth`), `src/drive.ts` (Drive API save/load), and `src/usePreventLeave.ts` (blocks tab close during sync). Env vars (`VITE_DRIVE_SYNC_ENABLED`, `VITE_GOOGLE_CLIENT_ID`, `VITE_AUTH_API`) are wired in `src/main.tsx`. The authorization code flow is used with a Cloudflare Worker backend (`worker/`) for code exchange and token refresh.
 - Tooltips use `react-tooltip` via a shared `<Tooltip id="header-tooltip">` in `App.tsx`; anchor elements use `data-tooltip-id` + `data-tooltip-content`.
 
 ## Runtime Gotchas
@@ -34,3 +34,4 @@
 
 ## Deployment
 - Pushes to `main` trigger `.github/workflows/pages-deployment.yaml`, which builds with Node 20 and publishes `dist` to Cloudflare Pages project `notecal`.
+- The `worker/` directory is a separate Cloudflare Worker; deploy it manually with `npx wrangler deploy` from `worker/`.

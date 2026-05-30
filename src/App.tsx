@@ -372,7 +372,7 @@ export default function App() {
   const currencyFetchTriggered = useRef(false);
   const [currencyLoaded, setCurrencyLoaded] = useState(false);
   const [visualLineCounts, setVisualLineCounts] = useState<number[]>([]);
-  const { token, isSignedIn, isLoading, signIn, signOut } = useGoogleAuth();
+  const { token, isSignedIn, isLoading, signIn, signOut, refreshToken } = useGoogleAuth();
   const [syncState, setSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isFirstRender = useRef(true);
@@ -397,17 +397,29 @@ export default function App() {
 
   const doSave = useCallback(async (state: StoredTabsState) => {
     if (!token) return;
-    try {
-      const merged = await saveToDrive(token, state);
+    const attempt = async (t: string) => {
+      const merged = await saveToDrive(t, state);
       setTabsState(merged);
       setSyncState('saved');
+    };
+    try {
+      await attempt(token);
     } catch {
+      const newToken = await refreshToken();
+      if (newToken) {
+        try {
+          await attempt(newToken);
+          return;
+        } catch {
+          // retry failed — fall through to error state
+        }
+      }
       setSyncState('error');
     }
-  }, [token]);
+  }, [token, refreshToken]);
 
   const saveNow = () => {
-    if (!token) { signIn(); return; }
+    if (!token || syncState === 'error') { signIn(); return; }
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
     setSyncState('saving');
     doSave(tabsState);
@@ -424,14 +436,14 @@ export default function App() {
         const data = await loadFromDrive(token);
         if (data) setTabsState(data);
       } catch {
-        // first sync may fail if no file or network issue
+        refreshToken();
       } finally {
         setIsInitialSync(false);
       }
     };
 
     load();
-  }, [token, isSignedIn, setTabsState]);
+  }, [token, isSignedIn, setTabsState, refreshToken]);
 
   useEffect(() => {
     if (syncState === 'saved' || syncState === 'error') {
@@ -977,7 +989,7 @@ export default function App() {
         
         <div className="flex items-center gap-x-2.5">
           {/* Auth / Drive controls */}
-          {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+          {import.meta.env.VITE_DRIVE_SYNC_ENABLED === 'true' && import.meta.env.VITE_GOOGLE_CLIENT_ID && (
             <>
               {!isLoading && !isSignedIn && (
                 <button type="button"
