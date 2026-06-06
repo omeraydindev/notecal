@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react';
 import { Tooltip } from 'react-tooltip';
-import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, LogIn, LogOut, Cloud, Loader2, MoreHorizontal } from 'lucide-react';
+import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, LogIn, LogOut, Cloud, Loader2, MoreHorizontal, Download, Upload } from 'lucide-react';
 import { useGoogleAuth } from './auth';
 import { saveToDrive, loadFromDrive } from './drive';
 import usePreventLeave from './usePreventLeave';
@@ -394,6 +394,44 @@ export default function App() {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOverflowOpen]);
+
+  const exportTabs = useCallback(() => {
+    const blob = new Blob([JSON.stringify(tabsState, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'notecal-tabs.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    setIsOverflowOpen(false);
+  }, [tabsState]);
+
+  const importTabs = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target?.result as string);
+          const normalized = normalizeTabsState(data);
+          if (normalized) {
+            setTabsState(normalized);
+          } else {
+            alert('Invalid file format.');
+          }
+        } catch {
+          alert('Could not parse file.');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+    setIsOverflowOpen(false);
+  }, []);
 
   usePreventLeave(syncState === 'saving' || isInitialSync);
 
@@ -1156,8 +1194,8 @@ export default function App() {
             </button>
           </div>
 
-          {/* Mobile overflow menu */}
-          <div className="relative flex md:hidden" ref={overflowRef}>
+          {/* Overflow menu (mobile: full, desktop: export/import only) */}
+          <div className="relative flex" ref={overflowRef}>
             <button type="button"
               onClick={() => setIsOverflowOpen((v) => !v)}
               className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
@@ -1166,37 +1204,54 @@ export default function App() {
             </button>
             {isOverflowOpen && (
               <div className={`absolute top-full right-0 mt-1.5 py-1.5 rounded-lg border shadow-lg flex flex-col z-50 min-w-[190px] whitespace-nowrap ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
+                {/* Mobile-only items */}
+                <div className="md:hidden flex flex-col">
+                  <button type="button"
+                    onClick={() => setFontSize(Math.min(32, fontSize + 1))}
+                    className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
+                  >
+                    <ZoomIn size={16} /> Increase font size
+                  </button>
+                  <button type="button"
+                    onClick={() => setFontSize(Math.max(10, fontSize - 1))}
+                    className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
+                  >
+                    <ZoomOut size={16} /> Decrease font size
+                  </button>
+                  <button type="button"
+                    onClick={() => setWordWrap(!wordWrap)}
+                    className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${
+                      wordWrap
+                        ? isDarkMode
+                          ? 'text-emerald-400 hover:bg-slate-800 active:bg-slate-700'
+                          : 'text-emerald-700 hover:bg-slate-100 active:bg-slate-200'
+                        : isDarkMode
+                          ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300'
+                          : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'
+                    }`}
+                  >
+                    <WrapText size={16} /> {wordWrap ? 'Word wrap on' : 'Word wrap off'}
+                  </button>
+                  <button type="button"
+                    onClick={cycleTheme}
+                    className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
+                  >
+                    {themeMode === 'device' ? <Monitor size={16} /> : themeMode === 'light' ? <Sun size={16} /> : <Moon size={16} />} {themeMode === 'device' ? 'System theme' : themeMode === 'light' ? 'Light theme' : 'Dark theme'}
+                  </button>
+                  <div className={`mx-3.5 my-1.5 border-t ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`} />
+                </div>
+                {/* All-screen items */}
                 <button type="button"
-                  onClick={() => setFontSize(Math.min(32, fontSize + 1))}
+                  onClick={exportTabs}
                   className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
                 >
-                  <ZoomIn size={16} /> Increase font size
+                  <Download size={16} /> Export data
                 </button>
                 <button type="button"
-                  onClick={() => setFontSize(Math.max(10, fontSize - 1))}
+                  onClick={importTabs}
                   className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
                 >
-                  <ZoomOut size={16} /> Decrease font size
-                </button>
-                <button type="button"
-                  onClick={() => setWordWrap(!wordWrap)}
-                  className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${
-                    wordWrap
-                      ? isDarkMode
-                        ? 'text-emerald-400 hover:bg-slate-800 active:bg-slate-700'
-                        : 'text-emerald-700 hover:bg-slate-100 active:bg-slate-200'
-                      : isDarkMode
-                        ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300'
-                        : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'
-                  }`}
-                >
-                  <WrapText size={16} /> {wordWrap ? 'Word wrap on' : 'Word wrap off'}
-                </button>
-                <button type="button"
-                  onClick={cycleTheme}
-                  className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
-                >
-                  {themeMode === 'device' ? <Monitor size={16} /> : themeMode === 'light' ? <Sun size={16} /> : <Moon size={16} />} {themeMode === 'device' ? 'System theme' : themeMode === 'light' ? 'Light theme' : 'Dark theme'}
+                  <Upload size={16} /> Import data
                 </button>
               </div>
             )}
