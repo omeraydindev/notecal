@@ -22,6 +22,7 @@ export const mathDarkTheme = createTheme({
     { tag: t.variableName, color: '#60a5fa' }, // blue-400
     { tag: t.operator, color: '#94a3b8' }, // slate-400
     { tag: t.keyword, color: '#f472b6' }, // pink-400
+    { tag: t.atom, color: '#34d399' }, // emerald-400
   ],
 });
 
@@ -46,5 +47,6 @@ export const mathLightTheme = createTheme({
     { tag: t.variableName, color: '#3b82f6' }, // blue-500
     { tag: t.operator, color: '#64748b' }, // slate-500
     { tag: t.keyword, color: '#ec4899' }, // pink-500
+    { tag: t.atom, color: '#10b981' }, // emerald-500
   ],
 });

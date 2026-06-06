@@ -31,6 +31,8 @@
 - When word wrap is enabled, the results panel aligns with visual (wrapped) lines: the result appears on the first visual line and empty slots appear on continuation lines, with the results array having one entry per visual line.
 - The results panel is line-synchronized to CodeMirror scrolling via direct DOM access to `.cm-scroller`; changes to editor layout, line height, or padding can desync results.
 - Numeric shorthand handling (`k`, `m`, `b`) and comment stripping are duplicated for full-line evaluation and selection-popup evaluation; keep behavior aligned when changing expression parsing.
+- **Line references** (`$1`, `$-1`, etc.): pre-processed by `resolveLineReferences` before Math.js evaluation. Replaced with numeric value from `results[].value`. Invalid refs (forward, out-of-range, null target) are left as-is — the `$`-detection check (`expr.includes('$')`) then bails out with blank result. Both full-line and popup evaluation have their own `$`-check. The same `resolveLineReferences` function is shared; keep in sync if changing.
+- **Cross-tab `ref()`**: A `refFn` closure is seeded into the Math.js scope on each evaluation pass. After evaluation, the scope is saved to `tabScopesRef.current[activeTab.title]` for other tabs to read. `ref("tab name", "var name")` returns the variable value if found, else `NaN`. Only numeric variables are exposed; functions are filtered out.
 
 ## Deployment
 - Pushes to `main` trigger `.github/workflows/pages-deployment.yaml`, which builds with Node 20 and publishes `dist` to Cloudflare Pages project `notecal`.

@@ -45,6 +45,11 @@ const mathNotation = {
       return 'unit';
     }
 
+    // Line result references ($1, $-1, etc.)
+    if (stream.match(/^\$(-?\d+)\b/)) {
+      return 'atom';
+    }
+
     // Operators
     if (stream.match(/^[+\-*/^=()]/)) {
       return 'operator';

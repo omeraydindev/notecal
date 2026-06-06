@@ -367,6 +367,7 @@ export default function App() {
   const resultsRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const scopeRef = useRef<MathScope>({});
+  const tabScopesRef = useRef<Record<string, MathScope>>({});
   const currencyRates = useRef<Record<string, number>>({});
   const availableCurrencies = useRef<string[]>([]);
   const currencyFetchTriggered = useRef(false);
@@ -593,6 +594,24 @@ export default function App() {
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(num);
   };
 
+  const resolveLineReferences = (expr: string, currentIdx: number, results: Result[]): string => {
+    return expr.replace(/\$(-?\d+)\b/g, (match, numStr) => {
+      const target = parseInt(numStr, 10);
+      let targetIdx: number;
+      if (target > 0) {
+        targetIdx = target - 1;
+      } else if (target < 0) {
+        targetIdx = currentIdx + target;
+      } else {
+        return match;
+      }
+      if (targetIdx >= 0 && targetIdx < currentIdx && results[targetIdx]?.value != null) {
+        return String(results[targetIdx].value);
+      }
+      return match;
+    });
+  };
+
   const stripComments = (expr: string, isInBlockComment = false) => {
     let result = '';
     let index = 0;
@@ -622,15 +641,24 @@ export default function App() {
   };
 
   // Evaluate a single expression (for popup)
-  const evaluateExpression = (expr: string): string | null => {
+  const evaluateExpression = (expr: string, currentLineIdx?: number): string | null => {
     const { expr: uncommentedExpr } = stripComments(expr);
     if (!isMathLoaded || !window.math || !uncommentedExpr) return null;
 
+    let processedExpr = uncommentedExpr;
+
+    // Resolve line references if we know the current line
+    if (currentLineIdx !== undefined) {
+      processedExpr = resolveLineReferences(processedExpr, currentLineIdx, results);
+    }
+
     // Process shorthand multipliers (k, m, b)
-    const processedExpr = uncommentedExpr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
+    processedExpr = processedExpr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
       const multipliers: { [key: string]: number } = { k: 1e3, m: 1e6, b: 1e9 };
       return `(${num} * ${multipliers[suffix.toLowerCase()]})`;
     });
+
+    if (processedExpr.includes('$')) return null;
 
     try {
       // Use the current scope from main evaluation
@@ -664,15 +692,29 @@ export default function App() {
     const currencyFunctions = Object.fromEntries(
       Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
     );
-    const scope = { ...currencyFunctions }; // Reset variables scope on every render, but keep currency functions
+    // Cross-tab ref function
+    const refFn = (tabName: string, varName: string): number => {
+      const tabScope = tabScopesRef.current[tabName];
+      if (!tabScope) return NaN;
+      const val = tabScope[varName];
+      return typeof val === 'number' ? val : NaN;
+    };
+    const scope = { ...currencyFunctions, ref: refFn }; // Reset variables scope on every render, but keep currency/ref functions
     let isInBlockComment = false;
 
-    const newResults = lines.map((line) => {
-      const strippedLine = stripComments(line, isInBlockComment);
+    const newResults: Result[] = [];
+    for (let idx = 0; idx < lines.length; idx++) {
+      const strippedLine = stripComments(lines[idx], isInBlockComment);
       isInBlockComment = strippedLine.isInBlockComment;
 
       let expr = strippedLine.expr;
-      if (!expr) return { text: '', value: null };
+      if (!expr) {
+        newResults.push({ text: '', value: null });
+        continue;
+      }
+
+      // 1. Resolve line references ($1, $-1, etc.)
+      expr = resolveLineReferences(expr, idx, newResults);
 
       // 2. Process shorthand multipliers (k, m, b)
       expr = expr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
@@ -680,34 +722,45 @@ export default function App() {
         return `(${num} * ${multipliers[suffix.toLowerCase()]})`;
       });
 
+      // If expression is unchanged and contains $, it means a reference
+      // couldn't be resolved — let Math.js fail on it naturally
+      if (expr.includes('$')) {
+        newResults.push({ text: '', value: null });
+        continue;
+      }
+
       try {
         // Evaluate using math.js
         const res = window.math.evaluate(expr, scope);
 
         if (res === undefined || res === null || typeof res === 'function') {
-          return { text: '', value: null };
+          newResults.push({ text: '', value: null });
+          continue;
         }
 
         // Standard Numbers
         if (typeof res === 'number') {
-          return { text: formatNumber(res), value: res };
+          newResults.push({ text: formatNumber(res), value: res });
+          continue;
         }
 
         // Math.js specific objects (Units, Complex numbers, etc.)
         if (isMathDisplayObject(res)) {
-          return { text: res.toString(), value: null };
+          newResults.push({ text: res.toString(), value: null });
+          continue;
         }
 
-        return { text: '', value: null };
+        newResults.push({ text: '', value: null });
       } catch {
         // Silently ignore errors (e.g., normal text that isn't valid math)
-        return { text: '', value: null };
+        newResults.push({ text: '', value: null });
       }
-    });
+    }
 
     setResults(newResults);
-    scopeRef.current = scope; // Store scope for popup evaluation
-  }, [text, isMathLoaded, currencyLoaded]);
+    scopeRef.current = { ...scope, ref: refFn }; // Store scope for popup evaluation (keep ref)
+    tabScopesRef.current[activeTab.title] = { ...scope };
+  }, [text, isMathLoaded, currencyLoaded, activeTab.title]);
 
   // Synchronize vertical scrolling via native DOM synchronously to prevent lag
   useEffect(() => {
@@ -847,8 +900,11 @@ export default function App() {
         return;
       }
 
+      // Get the line number for relative reference resolution
+      const lineNumber = view.state.doc.lineAt(selection.from).number;
+
       // Evaluate the selected expression
-      const result = evaluateExpression(selectedText);
+      const result = evaluateExpression(selectedText, lineNumber - 1);
       
       if (result) {
         // Get cursor position for popup placement
