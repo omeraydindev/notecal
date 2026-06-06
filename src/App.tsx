@@ -730,82 +730,109 @@ export default function App() {
     }
   };
 
-  // Evaluate text line by line whenever it changes
-  useEffect(() => {
-    if (!isMathLoaded || !window.math) return;
+  // --- Shared evaluation helpers ---
 
-    const lines = text.split('\n');
-    const currencyFunctions = Object.fromEntries(
-      Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
-    );
-    // Cross-tab ref function
-    const refFn = (tabName: string, varName: string): number => {
-      const tabScope = tabScopesRef.current[tabName];
-      if (!tabScope) return NaN;
-      const val = tabScope[varName];
-      return typeof val === 'number' ? val : NaN;
-    };
-    const scope = { ...currencyFunctions, ref: refFn }; // Reset variables scope on every render, but keep currency/ref functions
+  // Cycle detection for lazy cross-tab evaluation
+  const evaluatingTabsSet = useRef(new Set<string>());
+
+  // Resolve a cross-tab ref, lazily evaluating the referenced tab if needed
+  const resolveRef = (tabName: string, varName: string): number => {
+    let tabScope = tabScopesRef.current[tabName];
+    if (!tabScope) {
+      const tab = tabs.find(t => t.title === tabName);
+      if (tab) {
+        tabScope = evaluateTabContent(tabName, tab.text);
+        tabScopesRef.current[tabName] = tabScope;
+      }
+    }
+    if (!tabScope) return NaN;
+    const val = tabScope[varName];
+    return typeof val === 'number' ? val : NaN;
+  };
+
+  // Evaluate lines against a scope, mutating scope via assignments, returning results.
+  // Used by both the main evaluation effect and lazy cross-tab evaluation.
+  const processLines = (lines: string[], scope: MathScope): Result[] => {
     let isInBlockComment = false;
+    const results: Result[] = [];
 
-    const newResults: Result[] = [];
     for (let idx = 0; idx < lines.length; idx++) {
       const strippedLine = stripComments(lines[idx], isInBlockComment);
       isInBlockComment = strippedLine.isInBlockComment;
 
       let expr = strippedLine.expr;
       if (!expr) {
-        newResults.push({ text: '', value: null });
+        results.push({ text: '', value: null });
         continue;
       }
 
-      // 1. Resolve line references ($1, $-1, etc.)
-      expr = resolveLineReferences(expr, idx, newResults);
-
-      // 2. Process shorthand multipliers (k, m, b)
+      expr = resolveLineReferences(expr, idx, results);
       expr = expr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
         const multipliers: { [key: string]: number } = { k: 1e3, m: 1e6, b: 1e9 };
         return `(${num} * ${multipliers[suffix.toLowerCase()]})`;
       });
 
-      // If expression is unchanged and contains $, it means a reference
-      // couldn't be resolved — let Math.js fail on it naturally
       if (expr.includes('$')) {
-        newResults.push({ text: '', value: null });
+        results.push({ text: '', value: null });
         continue;
       }
 
       try {
-        // Evaluate using math.js
         const res = window.math.evaluate(expr, scope);
 
         if (res === undefined || res === null || typeof res === 'function') {
-          newResults.push({ text: '', value: null });
+          results.push({ text: '', value: null });
           continue;
         }
 
-        // Standard Numbers
         if (typeof res === 'number') {
-          newResults.push({ text: formatNumber(res), value: res });
+          results.push({ text: formatNumber(res), value: res });
           continue;
         }
 
-        // Math.js specific objects (Units, Complex numbers, etc.)
         if (isMathDisplayObject(res)) {
-          newResults.push({ text: res.toString(), value: null });
+          results.push({ text: res.toString(), value: null });
           continue;
         }
 
-        newResults.push({ text: '', value: null });
+        results.push({ text: '', value: null });
       } catch {
-        // Silently ignore errors (e.g., normal text that isn't valid math)
-        newResults.push({ text: '', value: null });
+        results.push({ text: '', value: null });
       }
     }
 
+    return results;
+  };
+
+  // Evaluate a tab's text to build its scope (used for lazy cross-tab ref resolution)
+  const evaluateTabContent = (tabName: string, tabText: string): MathScope => {
+    if (evaluatingTabsSet.current.has(tabName)) return {};
+    evaluatingTabsSet.current.add(tabName);
+
+    const currencyFunctions = Object.fromEntries(
+      Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
+    );
+    const scope: MathScope = { ...currencyFunctions, ref: resolveRef };
+    processLines(tabText.split('\n'), scope);
+
+    evaluatingTabsSet.current.delete(tabName);
+    return scope;
+  };
+
+  // Evaluate text line by line whenever it changes
+  useEffect(() => {
+    if (!isMathLoaded || !window.math) return;
+
+    const currencyFunctions = Object.fromEntries(
+      Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
+    );
+    const scope: MathScope = { ...currencyFunctions, ref: resolveRef };
+    const newResults = processLines(text.split('\n'), scope);
+
     setResults(newResults);
-    scopeRef.current = { ...scope, ref: refFn }; // Store scope for popup evaluation (keep ref)
+    scopeRef.current = { ...scope, ref: resolveRef }; // Store scope for popup evaluation (keep ref)
     tabScopesRef.current[activeTab.title] = { ...scope };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, isMathLoaded, currencyLoaded, activeTab.title]);
 
   // Synchronize vertical scrolling via native DOM synchronously to prevent lag

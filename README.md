@@ -15,8 +15,8 @@ savings = income - rent    // 3,800
 - Multiple note tabs with persisted titles and content
 - Line and block comments (`//`, `/* ... */`)
 - Instant result popup on text selection
-- **Line result references** (`$1`, `$-1`, etc.) - reuse any previous line's result by number
-- **Cross-tab variable references** (`ref("Tab Name", "var")`) - use variables defined in other tabs
+- Line result references (`$1`, `$-1`, etc.) - reuse any previous line's result by number
+- Cross-tab variable references (`ref("Tab Name", "var")`) - use variables defined in other tabs
 - Syntax highlighting
 - Dark/light mode
 - Word wrapping
