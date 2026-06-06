@@ -376,6 +376,7 @@ export default function App() {
   const { token, isSignedIn, isLoading, signIn, signOut, refreshToken } = useGoogleAuth();
   const [syncState, setSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const isSavingRef = useRef(false);
   const isFirstRender = useRef(true);
   const driveLoadedRef = useRef(false);
   const [isInitialSync, setIsInitialSync] = useState(false);
@@ -398,30 +399,36 @@ export default function App() {
 
   const doSave = useCallback(async (state: StoredTabsState) => {
     if (!token) return;
-    const attempt = async (t: string) => {
-      const merged = await saveToDrive(t, state);
-      setTabsState(merged);
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+
+    const save = async (t: string) => {
+      await saveToDrive(t, state);
       setSyncState('saved');
     };
+
     try {
-      await attempt(token);
+      await save(token);
     } catch {
       const newToken = await refreshToken();
       if (newToken) {
         try {
-          await attempt(newToken);
+          await save(newToken);
           return;
         } catch {
           // retry failed — fall through to error state
         }
       }
       setSyncState('error');
+    } finally {
+      isSavingRef.current = false;
     }
   }, [token, refreshToken]);
 
   const saveNow = () => {
     if (!token || syncState === 'error') { signIn(); return; }
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    if (isSavingRef.current) return;
     setSyncState('saving');
     doSave(tabsState);
   };
@@ -466,6 +473,7 @@ export default function App() {
 
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
     autoSaveRef.current = setTimeout(() => {
+      if (isSavingRef.current) return;
       setSyncState('saving');
       doSave(tabsState);
     }, 1500);
