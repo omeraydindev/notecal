@@ -377,6 +377,7 @@ export default function App() {
   const [syncState, setSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isSavingRef = useRef(false);
+  const lastSavedUpdatedAtRef = useRef(tabsState.updatedAt);
   const isFirstRender = useRef(true);
   const driveLoadedRef = useRef(false);
   const [isInitialSync, setIsInitialSync] = useState(false);
@@ -437,11 +438,16 @@ export default function App() {
 
   const doSave = useCallback(async (state: StoredTabsState) => {
     if (!token) return;
-    if (isSavingRef.current) return;
+    if (isSavingRef.current) {
+      if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+      autoSaveRef.current = setTimeout(() => doSave(state), 500);
+      return;
+    }
     isSavingRef.current = true;
 
     const save = async (t: string) => {
-      await saveToDrive(t, state);
+      const merged = await saveToDrive(t, { ...state, updatedAt: lastSavedUpdatedAtRef.current });
+      lastSavedUpdatedAtRef.current = merged.updatedAt;
       setSyncState('saved');
     };
 
@@ -466,7 +472,6 @@ export default function App() {
   const saveNow = () => {
     if (!token || syncState === 'error') { signIn(); return; }
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-    if (isSavingRef.current) return;
     setSyncState('saving');
     doSave(tabsState);
   };
@@ -511,7 +516,6 @@ export default function App() {
 
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
     autoSaveRef.current = setTimeout(() => {
-      if (isSavingRef.current) return;
       setSyncState('saving');
       doSave(tabsState);
     }, 1500);

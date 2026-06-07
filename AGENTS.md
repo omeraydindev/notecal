@@ -34,6 +34,18 @@
 - **Line references** (`$1`, `$-1`, etc.): pre-processed by `resolveLineReferences` before Math.js evaluation. Replaced with numeric value from `results[].value`. Invalid refs (forward, out-of-range, null target) are left as-is — the `$`-detection check (`expr.includes('$')`) then bails out with blank result. Both full-line and popup evaluation have their own `$`-check. The same `resolveLineReferences` function is shared; keep in sync if changing.
 - **Cross-tab `ref()`**: A `refFn` closure is seeded into the Math.js scope on each evaluation pass. After evaluation, the scope is saved to `tabScopesRef.current[activeTab.title]` for other tabs to read. `ref("tab name", "var name")` returns the variable value if found, else `NaN`. Only numeric variables are exposed; functions are filtered out.
 
+## Drive Sync Behavioral Invariants
+
+When refactoring the auto-save / Drive sync logic in `App.tsx` and `drive.ts`, manually verify these scenarios. The sync state machine uses `isSavingRef` (prevents concurrent saves), a debounced auto-save (1500ms), and `lastSavedUpdatedAtRef` (tracks last-saved timestamp for merge gating).
+
+- **Fast typing during sync**: Type "345", wait for save to start (observe "Syncing..." tooltip), immediately type "678". On page reload, text must be "345678", not "345".
+- **Debounce survives save completion**: A save completing must not cancel the user's pending auto-save timeout. If the user types during a save, their edits must be persisted on the next debounce cycle, not lost.
+- **Concurrent save retry**: If a save is in-flight when another is requested, the second must reschedule (500ms retry in `doSave`), not drop silently. Trigger by rapidly tabbing between tabs while a save is in progress.
+- **Tab deletion sticks**: Delete a tab, wait for auto-save. On page reload, the tab must not reappear. The merge path in `saveToDrive` must not resurrect tabs that were removed locally.
+- **New tab syncs**: Create a tab, wait for auto-save. On page reload, the tab must be present.
+- **Cross-device merge**: If Drive has tabs not in local state (simulate by editing Drive file or importing), the next save must merge them in via `mergeTabs` (newer `lastModified` per tab wins).
+- **Initial load race**: Math.js (CDN) loading before the Drive fetch completes must not cause the default `INITIAL_TEXT` tab to be saved to Drive and corrupt the remote data.
+
 ## Deployment
 - Pushes to `main` trigger `.github/workflows/pages-deployment.yaml`, which builds with Node 20 and publishes `dist` to Cloudflare Pages project `notecal`.
 - The `worker/` directory is a separate Cloudflare Worker; deploy it manually with `npx wrangler deploy` from `worker/`.
