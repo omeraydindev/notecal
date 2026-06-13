@@ -2,14 +2,22 @@ import { atomWithStorage, createJSONStorage, unstable_withStorageValidator as wi
 import { atom } from 'jotai';
 import type { StoredTabsState, MathInstance } from './types';
 import { TABS_STORAGE_KEY, INITIAL_TEXT } from './constants';
-import { createTab } from './tabUtils';
+import { createTab, normalizeTabsState } from './tabUtils';
+
+const isValidTabsState = (v: unknown): v is StoredTabsState =>
+  normalizeTabsState(v) !== null;
 
 const defaultTabsState = (): StoredTabsState => {
   const tab = createTab(INITIAL_TEXT, 'New Note');
   return { tabs: [tab], activeTabId: tab.id, updatedAt: Date.now() };
 };
 
-export const tabsAtom = atomWithStorage<StoredTabsState>(TABS_STORAGE_KEY, defaultTabsState());
+export const tabsAtom = atomWithStorage<StoredTabsState>(
+  TABS_STORAGE_KEY,
+  defaultTabsState(),
+  withStorageValidator(isValidTabsState)(createJSONStorage(() => localStorage)),
+  { getOnInit: true },
+);
 
 const defaultFontSize = typeof window !== 'undefined' && window.innerWidth < 768 ? 12 : 16;
 
