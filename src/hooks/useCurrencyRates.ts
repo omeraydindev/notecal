@@ -22,6 +22,7 @@ export function useCurrencyRates(): boolean {
           const rates = { USD: 1, ...data.rates };
 
           math.createUnit('usd', { aliases: ['USD'] });
+          currencyCodes.add('usd');
           for (const code of Object.keys(rates)) {
             if (code === 'USD') continue;
             const lower = code.toLowerCase();

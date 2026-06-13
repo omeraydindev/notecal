@@ -21,6 +21,7 @@ savings = income - rent    // 3,800
 - Dark/light mode
 - Word wrapping
 - Auto-saves to localStorage
+- Autocomplete for functions, units, currencies, and variables
 
 Built with React, TypeScript, CodeMirror 6, and Math.js.
 

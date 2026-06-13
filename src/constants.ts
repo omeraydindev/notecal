@@ -5,7 +5,7 @@ let _math: MathInstance | null = null;
 export async function initMath(): Promise<MathInstance> {
   if (_math) return _math;
   const { create, all } = await import('mathjs');
-  _math = create(all) as MathInstance;
+  _math = create(all) as unknown as MathInstance;
   return _math;
 }
 

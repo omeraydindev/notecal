@@ -5,6 +5,7 @@ import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, Mor
 import type { MathScope, Result } from './types';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
+import { autocompletion } from '@codemirror/autocomplete';
 import { mathLanguageExtension } from './mathLanguage';
 import { mathDarkTheme, mathLightTheme } from './mathTheme';
 import { createTab, getNextNewNoteTitle } from './tabUtils';
@@ -14,6 +15,7 @@ import { initMath } from './constants';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useClickOutside } from './hooks/useClickOutside';
 import { useCurrencyRates } from './hooks/useCurrencyRates';
+import { useAutocomplete } from './hooks/useAutocomplete';
 import { useSelectionPopup } from './hooks/useSelectionPopup';
 import { useVisualLineCounts } from './hooks/useVisualLineCounts';
 import { useTabBackup } from './hooks/useTabBackup';
@@ -78,6 +80,8 @@ export default function App() {
 
   const { resolveRef, tabsContentKey, tabScopesRef, tabLastModifiedRef } = useCrossTabRef(tabs);
   const currencyLoadedRef = useRef(false);
+
+  const completionSource = useAutocomplete(scopeRef);
 
   useEffect(() => {
     initMath().then(setMath);
@@ -233,14 +237,42 @@ export default function App() {
       fontSize: `${fontSize}px !important`,
       lineHeight: `${lineHeight}px !important`,
     },
+    '.cm-completionIcon-unit': {
+      display: 'none !important',
+    },
+    '.cm-tooltip-autocomplete ul li[aria-selected]': {
+      background: 'rgba(17,119,204,0.15) !important',
+      color: 'inherit !important',
+    },
   }), [lineHeight, fontSize]);
 
   const cmExtensions = useMemo(() => [
     mathLanguageExtension,
     editorTheme,
     selectionExtension,
+    autocompletion({
+      override: [completionSource],
+      addToOptions: [{
+        position: 10,
+        render(completion) {
+          if ((completion as unknown as Record<string, unknown>).icon === 'currency') {
+            const span = document.createElement('span');
+            span.style.cssText = 'color:#10b981;font-weight:700;padding-right:10px';
+            span.textContent = '$';
+            return span;
+          }
+          if ((completion as unknown as Record<string, unknown>).icon === 'unit') {
+            const span = document.createElement('span');
+            span.style.cssText = 'color:#3b82f6;font-weight:700;padding-right:10px';
+            span.textContent = '#';
+            return span;
+          }
+          return null;
+        },
+      }],
+    }),
     ...(wordWrap ? [EditorView.lineWrapping] : []),
-  ], [editorTheme, selectionExtension, wordWrap]);
+  ], [editorTheme, selectionExtension, wordWrap, completionSource]);
 
   return (
     <div className={`flex flex-col h-screen font-sans transition-colors duration-200 ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>

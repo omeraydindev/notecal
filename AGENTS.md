@@ -23,6 +23,7 @@
 - `src/constants.ts` exports `initMath()` for lazy-loading Math.js and shared constants; the math instance is stored in the Jotai `mathAtom`.
 - `src/tabUtils.ts` holds tab creation, normalization, and title utility functions.
 - `src/evalUtils.ts` holds pure expression helpers: `isMathDisplayObject`, `formatNumber`, `resolveLineReferences`, `stripComments`, `evaluateSingle`, `processLines`, and the `currencyCodes` set for identifying currency unit results.
+- `src/hooks/useAutocomplete.ts` provides word-based autocomplete via `@codemirror/autocomplete` — suggests user variables, mathjs functions/constants, common physical units, and currency codes with custom `$`/`#` icons.
 - `src/hooks/useCurrencyRates.ts` fetches exchange rates and registers currencies as mathjs units (e.g. `100 usd to eur`) — always fetches on first load when Math.js is ready.
 - `src/hooks/useTabBackup.ts` handles JSON export/import of all tabs.
 - `src/hooks/useScrollSync.ts` synchronizes results panel scrolling with CodeMirror via native DOM scroll events.
