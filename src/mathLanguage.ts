@@ -46,7 +46,7 @@ const mathNotation = {
     }
 
     // Line result references ($1, $-1, etc.)
-    if (stream.match(/^\$(-?\d+)\b/)) {
+    if ((stream.pos === 0 || !/\w/.test(stream.string[stream.pos - 1])) && stream.match(/^\$(-?\d+)\b/)) {
       return 'atom';
     }
 

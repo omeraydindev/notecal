@@ -624,7 +624,7 @@ export default function App() {
   };
 
   const resolveLineReferences = (expr: string, currentIdx: number, results: Result[]): string => {
-    return expr.replace(/\$(-?\d+)\b/g, (match, numStr) => {
+    return expr.replace(/(?<!\w)\$(-?\d+)\b/g, (match, numStr) => {
       const target = parseInt(numStr, 10);
       let targetIdx: number;
       if (target > 0) {
