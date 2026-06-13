@@ -17,6 +17,7 @@ import { useCurrencyRates } from './hooks/useCurrencyRates';
 import { useSelectionPopup } from './hooks/useSelectionPopup';
 import { useVisualLineCounts } from './hooks/useVisualLineCounts';
 import { useTabBackup } from './hooks/useTabBackup';
+import { useScrollSync } from './hooks/useScrollSync';
 import SortableTab from './components/SortableTab';
 import {
   DndContext,
@@ -79,6 +80,8 @@ export default function App() {
   const { popup, clearPopup, selectionExtension } = useSelectionPopup(results, scopeRef);
 
   const { exportTabs, importTabs } = useTabBackup(tabsState, setTabsState, setIsOverflowOpen);
+
+  useScrollSync(editorRef, resultsRef, activeTabId);
 
   // DnD sensors
   const sensors = useSensors(
@@ -234,49 +237,6 @@ export default function App() {
     tabScopesRef.current[activeTab.title] = { ...scope };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, currencyLoaded, activeTab.title, tabsContentKey]);
-
-  // Synchronize vertical scrolling via native DOM synchronously to prevent lag
-  useEffect(() => {
-    const editorContainer = editorRef.current;
-    const resultsPanel = resultsRef.current;
-    if (!editorContainer || !resultsPanel) return;
-
-    // Find the CodeMirror scroller element - retry if not found yet
-    const findAndAttachScroller = () => {
-      const scroller = editorContainer.querySelector('.cm-scroller');
-      if (!scroller) {
-        // CodeMirror not ready yet, try again
-        setTimeout(findAndAttachScroller, 50);
-        return;
-      }
-
-      const handleScroll = () => {
-        // Direct, synchronous update. requestAnimationFrame adds a 1-frame lag
-        // which causes visual tearing during fast scrolling.
-        if (resultsPanel.scrollTop !== scroller.scrollTop) {
-          resultsPanel.scrollTop = scroller.scrollTop;
-        }
-      };
-
-      scroller.addEventListener('scroll', handleScroll, { passive: true });
-      
-      // Store cleanup function
-      return () => scroller.removeEventListener('scroll', handleScroll);
-    };
-
-    const cleanup = findAndAttachScroller();
-    return () => {
-      if (cleanup) cleanup();
-    };
-  }, []);
-
-  useEffect(() => {
-    const scroller = editorRef.current?.querySelector('.cm-scroller');
-    const resultsPanel = resultsRef.current;
-    if (!scroller || !resultsPanel) return;
-
-    resultsPanel.scrollTop = scroller.scrollTop;
-  }, [activeTabId]);
 
   useEffect(() => {
     if (!isRenamingTab) return;
