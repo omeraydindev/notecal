@@ -1021,7 +1021,7 @@ export default function App() {
   }, [results, wordWrap, visualLineCounts]);
 
   // Create EditorView theme to force exact line height matching stripes
-  const editorTheme = EditorView.theme({
+  const editorTheme = useMemo(() => EditorView.theme({
     '.cm-content': {
       padding: 'var(--padding-top) var(--padding-top) var(--padding-bottom) var(--padding-top) !important',
     },
@@ -1034,13 +1034,23 @@ export default function App() {
       fontSize: `${fontSize}px !important`,
       lineHeight: `${lineHeight}px !important`,
     },
-  });
+  }), [lineHeight, fontSize]);
 
-  const selectionExtension = EditorView.updateListener.of((update) => {
+  const handleSelectionChangeRef = useRef(handleSelectionChange);
+  handleSelectionChangeRef.current = handleSelectionChange;
+
+  const selectionExtension = useMemo(() => EditorView.updateListener.of((update) => {
     if (update.selectionSet && update.view) {
-      handleSelectionChange(update.view);
+      handleSelectionChangeRef.current(update.view);
     }
-  });
+  }), []);
+
+  const cmExtensions = useMemo(() => [
+    mathLanguageExtension,
+    editorTheme,
+    selectionExtension,
+    ...(wordWrap ? [EditorView.lineWrapping] : []),
+  ], [editorTheme, selectionExtension, wordWrap]);
 
   const updateVisualLineCounts = useCallback(() => {
     if (!wordWrap) {
@@ -1377,12 +1387,7 @@ export default function App() {
             value={text}
             onChange={updateActiveTabText}
             theme={isDarkMode ? mathDarkTheme : mathLightTheme}
-            extensions={[
-              mathLanguageExtension,
-              editorTheme,
-              selectionExtension,
-              ...(wordWrap ? [EditorView.lineWrapping] : []),
-            ]}
+            extensions={cmExtensions}
             basicSetup={{
               lineNumbers: false,
               foldGutter: false,
