@@ -77,6 +77,7 @@ export default function App() {
   const { sensors, handleDragStart, handleDragEnd, activeId } = useTabDnd(tabs, setTabsState);
 
   const { resolveRef, tabsContentKey, tabScopesRef, tabLastModifiedRef } = useCrossTabRef(tabs);
+  const currencyLoadedRef = useRef(false);
 
   useEffect(() => {
     initMath().then(setMath);
@@ -85,6 +86,14 @@ export default function App() {
   // Evaluate text line by line whenever it changes
   useEffect(() => {
     if (!math) return;
+
+    // Clear cached cross-tab scopes when currency first loads — they may have
+    // been evaluated without currency units and cached stale (empty) scopes.
+    if (currencyLoaded && !currencyLoadedRef.current) {
+      Object.keys(tabScopesRef.current).forEach(k => delete tabScopesRef.current[k]);
+    }
+    currencyLoadedRef.current = currencyLoaded;
+
     // Invalidate cached scopes for tabs whose content changed since last evaluation
     for (const tab of tabs) {
       const prev = tabLastModifiedRef.current[tab.id];
