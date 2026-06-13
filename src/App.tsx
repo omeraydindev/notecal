@@ -802,8 +802,27 @@ export default function App() {
     return scope;
   };
 
+  // Track lastModified per tab to detect stale cross-tab ref() caches
+  const tabLastModifiedRef = useRef<Record<string, number>>({});
+
+  // Hash of all tab contents — changes when any tab's text or lastModified changes,
+  // ensuring the eval effect re-runs for cross-tab ref() after import or Drive sync.
+  const tabsContentKey = useMemo(
+    () => tabs.map((t) => `${t.id}:${t.lastModified}`).join('|'),
+    [tabs],
+  );
+
   // Evaluate text line by line whenever it changes
   useEffect(() => {
+    // Invalidate cached scopes for tabs whose content changed since last evaluation
+    for (const tab of tabs) {
+      const prev = tabLastModifiedRef.current[tab.id];
+      if (prev !== undefined && prev !== tab.lastModified) {
+        delete tabScopesRef.current[tab.title];
+      }
+      tabLastModifiedRef.current[tab.id] = tab.lastModified;
+    }
+
     const currencyFunctions = Object.fromEntries(
       Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
     );
@@ -814,7 +833,7 @@ export default function App() {
     scopeRef.current = { ...scope, ref: resolveRef }; // Store scope for popup evaluation (keep ref)
     tabScopesRef.current[activeTab.title] = { ...scope };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, currencyLoaded, activeTab.title]);
+  }, [text, currencyLoaded, activeTab.title, tabsContentKey]);
 
   // Synchronize vertical scrolling via native DOM synchronously to prevent lag
   useEffect(() => {
