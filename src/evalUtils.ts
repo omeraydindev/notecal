@@ -99,6 +99,10 @@ export const evaluateSingle = (
       return { text: formatNumber(res), value: res, raw: res };
     }
 
+    if (typeof res === 'boolean') {
+      return { text: String(res), value: null, raw: res };
+    }
+
     if (isMathDisplayObject(res)) {
       if (res.isUnit) {
         const units = (res as { units: Array<{ unit: { name: string } }> }).units;

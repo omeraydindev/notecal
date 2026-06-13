@@ -20,7 +20,7 @@
 ## App Structure
 - This is a single-package React 19 + TypeScript + Vite app; the runtime entrypoint is `src/main.tsx`, and nearly all UI/evaluation behavior lives in `src/App.tsx`.
 - `src/mathLanguage.ts` defines the custom CodeMirror stream language for NoteCal syntax, while `src/mathTheme.ts` defines light/dark CodeMirror themes.
-- `src/constants.ts` exports `initMath()` for lazy-loading Math.js and shared constants; the math instance is stored in the Jotai `mathAtom`.
+- `src/constants.ts` exports `initMath()` for lazy-loading Math.js with only the needed functions (tree-shaken via explicit `*Dependencies` imports instead of `create(all)`). The math instance is stored in the Jotai `mathAtom`.
 - `src/tabUtils.ts` holds tab creation, normalization, and title utility functions.
 - `src/evalUtils.ts` holds pure expression helpers: `isMathDisplayObject`, `formatNumber`, `resolveLineReferences`, `stripComments`, `evaluateSingle`, `processLines`, and the `currencyCodes` set for identifying currency unit results.
 - `src/hooks/useAutocomplete.ts` provides word-based autocomplete via `@codemirror/autocomplete` — suggests user variables, mathjs functions/constants, common physical units, and currency codes with custom `$`/`#` icons.
@@ -32,7 +32,7 @@
 - `src/components/SortableTab.tsx` is the draggable tab component.
 - Tailwind CSS v4 is wired through `@tailwindcss/vite` in `vite.config.ts` and imported from `src/index.css`; there is no separate Tailwind config file.
 - Tooltips use `react-tooltip` via a shared `<Tooltip id="header-tooltip">` in `App.tsx`; anchor elements use `data-tooltip-id` + `data-tooltip-content`.
-- Math evaluation uses Math.js.
+- Math evaluation uses Math.js. New functions require adding their `*Dependencies` import and entry in `src/constants.ts` — the bundle is built from explicit deps, not `create(all)`.
 
 ## Runtime Gotchas
 - Currency conversion uses mathjs units (e.g. `100 usd to eur`). Rates are fetched from `https://open.er-api.com/v6/latest/USD` on first load when math.js is ready. Once loaded, any mathjs unit conversion works (e.g. `1 inch to cm`, `90 km/h to m/s`).

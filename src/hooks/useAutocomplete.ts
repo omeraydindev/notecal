@@ -17,7 +17,7 @@ const COMMON_UNITS = new Set([
   // volume
   'l', 'L', 'liter', 'litre', 'ml', 'mL', 'gallon', 'gal', 'quart', 'qt', 'cup', 'floz',
   // time
-  's', 'sec', 'second', 'min', 'minute', 'h', 'hr', 'hour', 'day', 'week', 'year',
+  's', 'sec', 'second', 'min', 'minute', 'h', 'hr', 'hour', 'day', 'week', 'month', 'year',
   // temperature
   'degC', 'degF', 'K', 'celsius', 'fahrenheit', 'kelvin',
 ]);
@@ -34,7 +34,10 @@ const MATHJS_NAMES = new Set([
   'factorial',
   // units
   'to', 'toBest',
+  // logical
+  'and', 'or', 'not',
 ]);
+const CONST_VALUES = new Set(['true', 'false']);
 
 export function useAutocomplete(scopeRef: React.MutableRefObject<MathScope>) {
   const math = useAtomValue(mathAtom);
@@ -67,6 +70,10 @@ export function useAutocomplete(scopeRef: React.MutableRefObject<MathScope>) {
           if (name in (math as unknown as Record<string, unknown>)) {
             options.push({ label: name, type: 'function' });
           }
+        }
+
+        for (const name of CONST_VALUES) {
+          options.push({ label: name, type: 'constant' });
         }
 
         // Common units + currencies (skip mathjs's full Unit.UNITS — too many)
