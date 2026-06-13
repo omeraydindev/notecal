@@ -9,7 +9,7 @@ import { mathLanguageExtension } from './mathLanguage';
 import { mathDarkTheme, mathLightTheme } from './mathTheme';
 import { math } from './constants';
 import { createTab, normalizeTabsState, getNextNewNoteTitle } from './tabUtils';
-import { tabsAtom } from './store';
+import { tabsAtom, fontSizeAtom, wordWrapAtom } from './store';
 import SortableTab from './components/SortableTab';
 import {
   DndContext,
@@ -42,27 +42,8 @@ export default function App() {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const text = activeTab?.text ?? '';
   const [results, setResults] = useState<Result[]>([]);
-  const [fontSize, setFontSize] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('notecal-fontSize');
-      if (saved !== null) {
-        const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed >= 10 && parsed <= 32) {
-          return parsed;
-        }
-      }
-      const isMobile = window.innerWidth < 768;
-      return isMobile ? 12 : 16;
-    }
-    return 16;
-  });
-  const [wordWrap, setWordWrap] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('notecal-wordWrap');
-      return saved === 'true';
-    }
-    return false;
-  });
+  const [fontSize, setFontSize] = useAtom(fontSizeAtom);
+  const [wordWrap, setWordWrap] = useAtom(wordWrapAtom);
   const [isRenamingTab, setIsRenamingTab] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
   
@@ -199,19 +180,6 @@ export default function App() {
       }));
     }
   };
-
-  // Persist font size to local storage whenever it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('notecal-fontSize', fontSize.toString());
-    }
-  }, [fontSize]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('notecal-wordWrap', wordWrap.toString());
-    }
-  }, [wordWrap]);
 
   // Fetch currency rates only when a conversion function is used in text
   useEffect(() => {

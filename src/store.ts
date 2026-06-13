@@ -1,4 +1,4 @@
-import { atomWithStorage } from 'jotai/utils';
+import { atomWithStorage, createJSONStorage, unstable_withStorageValidator as withStorageValidator } from 'jotai/utils';
 import type { StoredTabsState } from './types';
 import { TABS_STORAGE_KEY, INITIAL_TEXT } from './constants';
 import { createTab } from './tabUtils';
@@ -9,3 +9,17 @@ const defaultTabsState = (): StoredTabsState => {
 };
 
 export const tabsAtom = atomWithStorage<StoredTabsState>(TABS_STORAGE_KEY, defaultTabsState());
+
+const defaultFontSize = typeof window !== 'undefined' && window.innerWidth < 768 ? 12 : 16;
+
+const isValidFontSize = (v: unknown): v is number =>
+  typeof v === 'number' && !isNaN(v) && v >= 10 && v <= 32;
+
+export const fontSizeAtom = atomWithStorage<number>(
+  'notecal-fontSize',
+  defaultFontSize,
+  withStorageValidator(isValidFontSize)(createJSONStorage(() => localStorage)),
+  { getOnInit: true },
+);
+
+export const wordWrapAtom = atomWithStorage<boolean>('notecal-wordWrap', false, undefined, { getOnInit: true });

@@ -20,13 +20,17 @@
 ## App Structure
 - This is a single-package React 19 + TypeScript + Vite app; the runtime entrypoint is `src/main.tsx`, and nearly all UI/evaluation behavior lives in `src/App.tsx`.
 - `src/mathLanguage.ts` defines the custom CodeMirror stream language for NoteCal syntax, while `src/mathTheme.ts` defines light/dark CodeMirror themes.
+- `src/constants.ts` holds the Math.js instance (`math`) and shared constants.
+- `src/tabUtils.ts` holds tab creation, normalization, and title utility functions.
+- `src/store.ts` defines Jotai atoms for persisted state (tabs, font size, word wrap) using `atomWithStorage` — no manual `useEffect` persistence.
+- `src/components/SortableTab.tsx` is the draggable tab component.
 - Tailwind CSS v4 is wired through `@tailwindcss/vite` in `vite.config.ts` and imported from `src/index.css`; there is no separate Tailwind config file.
 - Tooltips use `react-tooltip` via a shared `<Tooltip id="header-tooltip">` in `App.tsx`; anchor elements use `data-tooltip-id` + `data-tooltip-content`.
 - Math evaluation uses Math.js.
 
 ## Runtime Gotchas
 - Currency conversion functions are generated only after text contains a zero-argument pattern like `usd_to_try()` and rates are fetched from `https://open.er-api.com/v6/latest/USD`.
-- Tabs persist in `localStorage` under `notecal-tabs`; legacy single-note text may exist under `notecal-text` and is migrated as a fallback. Font size persists under `notecal-fontSize`; word wrap preference persists under `notecal-wordWrap`; theme follows `prefers-color-scheme` and is not persisted.
+- Tabs, font size, and word wrap persist in `localStorage` via Jotai `atomWithStorage` (keys: `notecal-tabs`, `notecal-fontSize`, `notecal-wordWrap`); theme follows `prefers-color-scheme` and is not persisted.
 - When word wrap is enabled, the results panel aligns with visual (wrapped) lines: the result appears on the first visual line and empty slots appear on continuation lines, with the results array having one entry per visual line.
 - The results panel is line-synchronized to CodeMirror scrolling via direct DOM access to `.cm-scroller`; changes to editor layout, line height, or padding can desync results.
 - Numeric shorthand handling (`k`, `m`, `b`) and comment stripping are duplicated for full-line evaluation and selection-popup evaluation; keep behavior aligned when changing expression parsing.
