@@ -18,22 +18,15 @@ import { useSelectionPopup } from './hooks/useSelectionPopup';
 import { useVisualLineCounts } from './hooks/useVisualLineCounts';
 import { useTabBackup } from './hooks/useTabBackup';
 import { useScrollSync } from './hooks/useScrollSync';
+import { useTabDnd } from './hooks/useTabDnd';
 import SortableTab from './components/SortableTab';
 import {
   DndContext,
   closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
   DragOverlay,
-  type DragEndEvent,
-  type DragStartEvent,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
-  sortableKeyboardCoordinates,
   horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
 
@@ -62,9 +55,6 @@ export default function App() {
     });
   }, []);
 
-  // Drag and drop state
-  const [activeId, setActiveId] = useState<string | null>(null);
-
   const editorRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -83,38 +73,7 @@ export default function App() {
 
   useScrollSync(editorRef, resultsRef, activeTabId);
 
-  // DnD sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveId(null);
-
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = tabs.findIndex((tab) => tab.id === active.id);
-    const newIndex = tabs.findIndex((tab) => tab.id === over.id);
-
-    if (oldIndex !== -1 && newIndex !== -1) {
-      setTabsState((current) => ({
-        ...current,
-        tabs: arrayMove(current.tabs, oldIndex, newIndex),
-      }));
-    }
-  };
+  const { sensors, handleDragStart, handleDragEnd, activeId } = useTabDnd(tabs, setTabsState);
 
   // --- Shared evaluation helpers ---
 
