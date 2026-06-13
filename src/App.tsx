@@ -7,10 +7,9 @@ import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { mathLanguageExtension } from './mathLanguage';
 import { mathDarkTheme, mathLightTheme } from './mathTheme';
-import { math } from './constants';
 import { createTab, getNextNewNoteTitle } from './tabUtils';
 import { tabsAtom, fontSizeAtom, wordWrapAtom } from './store';
-import { isMathDisplayObject, formatNumber, resolveLineReferences, stripComments } from './evalUtils';
+import { processLines } from './evalUtils';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useClickOutside } from './hooks/useClickOutside';
 import { useCurrencyRates } from './hooks/useCurrencyRates';
@@ -93,60 +92,6 @@ export default function App() {
     if (!tabScope) return NaN;
     const val = tabScope[varName];
     return typeof val === 'number' ? val : NaN;
-  };
-
-  // Evaluate lines against a scope, mutating scope via assignments, returning results.
-  // Used by both the main evaluation effect and lazy cross-tab evaluation.
-  const processLines = (lines: string[], scope: MathScope): Result[] => {
-    let isInBlockComment = false;
-    const results: Result[] = [];
-
-    for (let idx = 0; idx < lines.length; idx++) {
-      const strippedLine = stripComments(lines[idx], isInBlockComment);
-      isInBlockComment = strippedLine.isInBlockComment;
-
-      let expr = strippedLine.expr;
-      if (!expr) {
-        results.push({ text: '', value: null });
-        continue;
-      }
-
-      expr = resolveLineReferences(expr, idx, results);
-      expr = expr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
-        const multipliers: { [key: string]: number } = { k: 1e3, m: 1e6, b: 1e9 };
-        return `(${num} * ${multipliers[suffix.toLowerCase()]})`;
-      });
-
-      if (expr.includes('$')) {
-        results.push({ text: '', value: null });
-        continue;
-      }
-
-      try {
-        const res = math.evaluate(expr, scope);
-
-        if (res === undefined || res === null || typeof res === 'function') {
-          results.push({ text: '', value: null });
-          continue;
-        }
-
-        if (typeof res === 'number') {
-          results.push({ text: formatNumber(res), value: res });
-          continue;
-        }
-
-        if (isMathDisplayObject(res)) {
-          results.push({ text: res.toString(), value: null });
-          continue;
-        }
-
-        results.push({ text: '', value: null });
-      } catch {
-        results.push({ text: '', value: null });
-      }
-    }
-
-    return results;
   };
 
   // Evaluate a tab's text to build its scope (used for lazy cross-tab ref resolution)

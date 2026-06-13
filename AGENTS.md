@@ -22,7 +22,7 @@
 - `src/mathLanguage.ts` defines the custom CodeMirror stream language for NoteCal syntax, while `src/mathTheme.ts` defines light/dark CodeMirror themes.
 - `src/constants.ts` holds the Math.js instance (`math`) and shared constants.
 - `src/tabUtils.ts` holds tab creation, normalization, and title utility functions.
-- `src/evalUtils.ts` holds pure expression helpers: `isMathDisplayObject`, `formatNumber`, `resolveLineReferences`, `stripComments`.
+- `src/evalUtils.ts` holds pure expression helpers: `isMathDisplayObject`, `formatNumber`, `resolveLineReferences`, `stripComments`, `evaluateSingle`, `processLines`.
 - `src/hooks/useCurrencyRates.ts` fetches exchange rates and seeds generated conversion functions into the Math.js scope.
 - `src/hooks/useTabBackup.ts` handles JSON export/import of all tabs.
 - `src/hooks/useScrollSync.ts` synchronizes results panel scrolling with CodeMirror via native DOM scroll events.
