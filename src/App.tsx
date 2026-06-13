@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties }
 import { useAtom } from 'jotai';
 import { Tooltip } from 'react-tooltip';
 import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, MoreHorizontal, Download, Upload } from 'lucide-react';
-import type { MathScope, MathDisplayObject, Result } from './types';
+import type { MathScope, Result } from './types';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { mathLanguageExtension } from './mathLanguage';
@@ -10,6 +10,7 @@ import { mathDarkTheme, mathLightTheme } from './mathTheme';
 import { math } from './constants';
 import { createTab, normalizeTabsState, getNextNewNoteTitle } from './tabUtils';
 import { tabsAtom, fontSizeAtom, wordWrapAtom } from './store';
+import { isMathDisplayObject, formatNumber, resolveLineReferences, stripComments } from './evalUtils';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useClickOutside } from './hooks/useClickOutside';
 import SortableTab from './components/SortableTab';
@@ -30,13 +31,6 @@ import {
   sortableKeyboardCoordinates,
   horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
-
-const isMathDisplayObject = (value: unknown): value is MathDisplayObject => (
-  typeof value === 'object'
-  && value !== null
-  && ('isUnit' in value || 'isComplex' in value || 'isFraction' in value)
-);
-
 
 export default function App() {
   const [tabsState, setTabsState] = useAtom(tabsAtom);
@@ -208,57 +202,6 @@ export default function App() {
 
     fetchCurrencyRates();
   }, [text]);
-
-  const formatNumber = (num: number) => {
-    if (typeof num !== 'number' || isNaN(num)) return '';
-    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(num);
-  };
-
-  const resolveLineReferences = (expr: string, currentIdx: number, results: Result[]): string => {
-    return expr.replace(/(?<!\w)\$(-?\d+)\b/g, (match, numStr) => {
-      const target = parseInt(numStr, 10);
-      let targetIdx: number;
-      if (target > 0) {
-        targetIdx = target - 1;
-      } else if (target < 0) {
-        targetIdx = currentIdx + target;
-      } else {
-        return match;
-      }
-      if (targetIdx >= 0 && targetIdx < currentIdx && results[targetIdx]?.value != null) {
-        return String(results[targetIdx].value);
-      }
-      return match;
-    });
-  };
-
-  const stripComments = (expr: string, isInBlockComment = false) => {
-    let result = '';
-    let index = 0;
-
-    while (index < expr.length) {
-      if (isInBlockComment) {
-        const blockEnd = expr.indexOf('*/', index);
-        if (blockEnd === -1) return { expr: result.trim(), isInBlockComment: true };
-        index = blockEnd + 2;
-        isInBlockComment = false;
-        continue;
-      }
-
-      if (expr.startsWith('//', index)) break;
-
-      if (expr.startsWith('/*', index)) {
-        isInBlockComment = true;
-        index += 2;
-        continue;
-      }
-
-      result += expr[index];
-      index += 1;
-    }
-
-    return { expr: result.trim(), isInBlockComment };
-  };
 
   // Evaluate a single expression (for popup)
   const evaluateExpression = (expr: string, currentLineIdx?: number): string | null => {
