@@ -13,6 +13,7 @@ import { tabsAtom, fontSizeAtom, wordWrapAtom } from './store';
 import { isMathDisplayObject, formatNumber, resolveLineReferences, stripComments } from './evalUtils';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useClickOutside } from './hooks/useClickOutside';
+import { useCurrencyRates } from './hooks/useCurrencyRates';
 import SortableTab from './components/SortableTab';
 import {
   DndContext,
@@ -73,15 +74,13 @@ export default function App() {
   const renameInputRef = useRef<HTMLInputElement>(null);
   const scopeRef = useRef<MathScope>({});
   const tabScopesRef = useRef<Record<string, MathScope>>({});
-  const currencyRates = useRef<Record<string, number>>({});
-  const availableCurrencies = useRef<string[]>([]);
-  const currencyFetchTriggered = useRef(false);
-  const [currencyLoaded, setCurrencyLoaded] = useState(false);
   const [visualLineCounts, setVisualLineCounts] = useState<number[]>([]);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
   useClickOutside(overflowRef, () => setIsOverflowOpen(false), isOverflowOpen);
+
+  const currencyLoaded = useCurrencyRates(text, scopeRef);
 
   const exportTabs = useCallback(() => {
     const blob = new Blob([JSON.stringify(tabsState, null, 2)], { type: 'application/json' });
@@ -153,55 +152,6 @@ export default function App() {
       }));
     }
   };
-
-  // Fetch currency rates only when a conversion function is used in text
-  useEffect(() => {
-    if (currencyFetchTriggered.current) return;
-
-    const currencyPattern = /\b[a-z]{3}_to_[a-z]{3}\(\)/;
-    if (!currencyPattern.test(text)) return;
-
-    currencyFetchTriggered.current = true;
-
-    const fetchCurrencyRates = async () => {
-      try {
-        const response = await fetch('https://open.er-api.com/v6/latest/USD');
-        const data = await response.json();
-        
-        if (data && data.rates) {
-          const rates = { USD: 1, ...data.rates };
-          const currencies = Object.keys(rates);
-          
-          currencyRates.current = rates;
-          availableCurrencies.current = currencies;
-
-          // Generate dynamic conversion functions
-          const currencyFunctions: Record<string, () => number> = {};
-          
-          for (const from of currencies) {
-            for (const to of currencies) {
-              if (from !== to) {
-                const fnName = `${from.toLowerCase()}_to_${to.toLowerCase()}`;
-                currencyFunctions[fnName] = () => {
-                  const fromRate = rates[from];
-                  const toRate = rates[to];
-                  return toRate / fromRate;
-                };
-              }
-            }
-          }
-
-          // Add functions to scope
-          Object.assign(scopeRef.current, currencyFunctions);
-          setCurrencyLoaded(true);
-        }
-      } catch (error) {
-        console.error('Failed to fetch currency rates:', error);
-      }
-    };
-
-    fetchCurrencyRates();
-  }, [text]);
 
   // Evaluate a single expression (for popup)
   const evaluateExpression = (expr: string, currentLineIdx?: number): string | null => {

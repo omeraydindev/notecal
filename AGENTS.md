@@ -23,6 +23,7 @@
 - `src/constants.ts` holds the Math.js instance (`math`) and shared constants.
 - `src/tabUtils.ts` holds tab creation, normalization, and title utility functions.
 - `src/evalUtils.ts` holds pure expression helpers: `isMathDisplayObject`, `formatNumber`, `resolveLineReferences`, `stripComments`.
+- `src/hooks/useCurrencyRates.ts` fetches exchange rates and seeds generated conversion functions into the Math.js scope.
 - `src/store.ts` defines Jotai atoms for persisted state (tabs, font size, word wrap) using `atomWithStorage` — no manual `useEffect` persistence.
 - `src/components/SortableTab.tsx` is the draggable tab component.
 - Tailwind CSS v4 is wired through `@tailwindcss/vite` in `vite.config.ts` and imported from `src/index.css`; there is no separate Tailwind config file.
