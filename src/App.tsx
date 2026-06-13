@@ -9,6 +9,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { mathLanguageExtension } from './mathLanguage';
 import { mathDarkTheme, mathLightTheme } from './mathTheme';
+import { create, all } from 'mathjs';
 import {
   DndContext,
   closestCenter,
@@ -29,13 +30,6 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// Extend Window interface to include math.js
-declare global {
-  interface Window {
-    math: MathApi;
-  }
-}
-
 type MathScope = Record<string, unknown>;
 
 type MathDisplayObject = {
@@ -45,16 +39,12 @@ type MathDisplayObject = {
   toString: () => string;
 };
 
-type MathEvaluationResult = number | MathDisplayObject | ((...args: never[]) => unknown) | null | undefined;
-
-interface MathApi {
-  evaluate: (expr: string, scope?: MathScope) => MathEvaluationResult;
-}
-
 interface Result {
   text: string;
   value: number | null;
 }
+
+const math = create(all);
 
 const TABS_STORAGE_KEY = 'notecal-tabs';
 const LEGACY_TEXT_STORAGE_KEY = 'notecal-text';
@@ -163,7 +153,7 @@ const getNextNewNoteTitle = (tabs: NoteTab[]) => {
   return `New Note (${index})`;
 };
 
-const isMathDisplayObject = (value: MathEvaluationResult): value is MathDisplayObject => (
+const isMathDisplayObject = (value: unknown): value is MathDisplayObject => (
   typeof value === 'object'
   && value !== null
   && ('isUnit' in value || 'isComplex' in value || 'isFraction' in value)
@@ -300,7 +290,6 @@ export default function App() {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const text = activeTab?.text ?? '';
   const [results, setResults] = useState<Result[]>([]);
-  const [isMathLoaded, setIsMathLoaded] = useState(() => !!(typeof window !== 'undefined' && window.math));
   const [fontSize, setFontSize] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('notecal-fontSize');
@@ -580,19 +569,9 @@ export default function App() {
     }
   }, [wordWrap]);
 
-  // Dynamically load Math.js from CDN for robust and safe evaluation
-  useEffect(() => {
-    if (window.math) return;
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js';
-    script.async = true;
-    script.onload = () => setIsMathLoaded(true);
-    document.body.appendChild(script);
-  }, []);
-
   // Fetch currency rates only when a conversion function is used in text
   useEffect(() => {
-    if (!isMathLoaded || !window.math || currencyFetchTriggered.current) return;
+    if (currencyFetchTriggered.current) return;
 
     const currencyPattern = /\b[a-z]{3}_to_[a-z]{3}\(\)/;
     if (!currencyPattern.test(text)) return;
@@ -637,7 +616,7 @@ export default function App() {
     };
 
     fetchCurrencyRates();
-  }, [isMathLoaded, text]);
+  }, [text]);
 
   const formatNumber = (num: number) => {
     if (typeof num !== 'number' || isNaN(num)) return '';
@@ -693,7 +672,7 @@ export default function App() {
   // Evaluate a single expression (for popup)
   const evaluateExpression = (expr: string, currentLineIdx?: number): string | null => {
     const { expr: uncommentedExpr } = stripComments(expr);
-    if (!isMathLoaded || !window.math || !uncommentedExpr) return null;
+    if (!uncommentedExpr) return null;
 
     let processedExpr = uncommentedExpr;
 
@@ -712,7 +691,7 @@ export default function App() {
 
     try {
       // Use the current scope from main evaluation
-      const res = window.math.evaluate(processedExpr, scopeRef.current);
+      const res = math.evaluate(processedExpr, scopeRef.current);
 
       if (res === undefined || res === null || typeof res === 'function') {
         return null;
@@ -782,7 +761,7 @@ export default function App() {
       }
 
       try {
-        const res = window.math.evaluate(expr, scope);
+        const res = math.evaluate(expr, scope);
 
         if (res === undefined || res === null || typeof res === 'function') {
           results.push({ text: '', value: null });
@@ -825,8 +804,6 @@ export default function App() {
 
   // Evaluate text line by line whenever it changes
   useEffect(() => {
-    if (!isMathLoaded || !window.math) return;
-
     const currencyFunctions = Object.fromEntries(
       Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
     );
@@ -837,7 +814,7 @@ export default function App() {
     scopeRef.current = { ...scope, ref: resolveRef }; // Store scope for popup evaluation (keep ref)
     tabScopesRef.current[activeTab.title] = { ...scope };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, isMathLoaded, currencyLoaded, activeTab.title]);
+  }, [text, currencyLoaded, activeTab.title]);
 
   // Synchronize vertical scrolling via native DOM synchronously to prevent lag
   useEffect(() => {

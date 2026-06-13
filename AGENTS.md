@@ -23,9 +23,9 @@
 - Tailwind CSS v4 is wired through `@tailwindcss/vite` in `vite.config.ts` and imported from `src/index.css`; there is no separate Tailwind config file.
 - Google OAuth + Drive sync is provided by `src/auth.tsx` (`GoogleAuthProvider`, `useGoogleAuth`), `src/drive.ts` (Drive API save/load), and `src/usePreventLeave.ts` (blocks tab close during sync). Env vars (`VITE_DRIVE_SYNC_ENABLED`, `VITE_GOOGLE_CLIENT_ID`, `VITE_AUTH_API`) are wired in `src/main.tsx`. The authorization code flow is used with a Cloudflare Worker backend (`worker/`) for code exchange and token refresh.
 - Tooltips use `react-tooltip` via a shared `<Tooltip id="header-tooltip">` in `App.tsx`; anchor elements use `data-tooltip-id` + `data-tooltip-content`.
+- Math evaluation uses Math.js.
 
 ## Runtime Gotchas
-- Math evaluation depends on loading Math.js from `https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js` at runtime; it is intentionally not imported from npm.
 - Currency conversion functions are generated only after text contains a zero-argument pattern like `usd_to_try()` and rates are fetched from `https://open.er-api.com/v6/latest/USD`.
 - Tabs persist in `localStorage` under `notecal-tabs`; legacy single-note text may exist under `notecal-text` and is migrated as a fallback. Font size persists under `notecal-fontSize`; word wrap preference persists under `notecal-wordWrap`; theme follows `prefers-color-scheme` and is not persisted.
 - When word wrap is enabled, the results panel aligns with visual (wrapped) lines: the result appears on the first visual line and empty slots appear on continuation lines, with the results array having one entry per visual line.
@@ -44,7 +44,6 @@ When refactoring the auto-save / Drive sync logic in `App.tsx` and `drive.ts`, m
 - **Tab deletion sticks**: Delete a tab, wait for auto-save. On page reload, the tab must not reappear. The merge path in `saveToDrive` must not resurrect tabs that were removed locally.
 - **New tab syncs**: Create a tab, wait for auto-save. On page reload, the tab must be present.
 - **Cross-device merge**: If Drive has tabs not in local state (simulate by editing Drive file or importing), the next save must merge them in via `mergeTabs` (newer `lastModified` per tab wins).
-- **Initial load race**: Math.js (CDN) loading before the Drive fetch completes must not cause the default `INITIAL_TEXT` tab to be saved to Drive and corrupt the remote data.
 
 ## Deployment
 - Pushes to `main` trigger `.github/workflows/pages-deployment.yaml`, which builds with Node 20 and publishes `dist` to Cloudflare Pages project `notecal`.
