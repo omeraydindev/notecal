@@ -61,7 +61,7 @@ export function GoogleAuthProvider({
   const mountedRef = useRef(true);
 
   const setTokens = useCallback((accessToken: string, expiresIn: number, refreshToken?: string) => {
-    const expiresAt = Date.now() + (expiresIn ?? 3600) * 1000;
+    const expiresAt = Date.now() + (expiresIn || 3600) * 1000;
     localStorage.setItem(ACCESS_TOKEN_KEY, JSON.stringify({ token: accessToken, expiresAt }));
     if (refreshToken) {
       localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
@@ -163,12 +163,18 @@ export function GoogleAuthProvider({
     script.src = GIS_URL;
     script.async = true;
     script.onload = () => {
-      codeClientRef.current = google.accounts.oauth2.initCodeClient({
-        client_id: clientId,
-        scope,
-        ux_mode: 'popup',
-        callback: handleCodeResponse,
-      });
+      try {
+        codeClientRef.current = google.accounts.oauth2.initCodeClient({
+          client_id: clientId,
+          scope,
+          ux_mode: 'popup',
+          callback: handleCodeResponse,
+        });
+      } catch (err) {
+        console.warn('Failed to init Google OAuth client', err);
+        setState((prev) => ({ ...prev, isLoading: false }));
+        return;
+      }
       if (!localStorage.getItem(REFRESH_TOKEN_KEY)) {
         setState((prev) => (prev.isLoading ? { ...prev, isLoading: false } : prev));
       }

@@ -1,40 +1,85 @@
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+const ALLOWED_ORIGINS = ['https://notecal.omeraydin.dev', 'http://localhost:5173'];
+
+function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get('Origin');
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    return {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    };
+  }
+  return {};
+}
+
+function respond(
+  body: BodyInit | null,
+  init: ResponseInit & { request: Request },
+): Response {
+  const { request, ...rest } = init;
+  return new Response(body, {
+    ...rest,
+    headers: { ...rest.headers, ...corsHeaders(request) },
+  });
+}
 
 interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
 }
 
-async function tokenExchange(body: URLSearchParams): Promise<Response> {
+async function tokenExchange(
+  body: URLSearchParams,
+  request: Request,
+): Promise<Response> {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
+    signal: AbortSignal.timeout(10_000),
   });
-  const data = await res.json();
-  return new Response(JSON.stringify(data), {
+
+  let data: unknown;
+  const contentType = res.headers.get('Content-Type') || '';
+  if (contentType.includes('application/json')) {
+    data = await res.json();
+  } else {
+    const text = await res.text();
+    data = { error: 'unexpected_response', text };
+  }
+
+  return respond(JSON.stringify(data), {
     status: res.status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    headers: { 'Content-Type': 'application/json' },
+    request,
   });
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
+      return respond(null, { status: 204, headers: {}, request });
     }
     if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405 });
+      return respond('Method not allowed', { status: 405, headers: {}, request });
     }
 
     const url = new URL(request.url);
-    const { code, redirectUri, refreshToken } = await request.json() as Record<string, string>;
+
+    let body: Record<string, string>;
+    try {
+      body = await request.json() as Record<string, string>;
+    } catch {
+      return respond(JSON.stringify({ error: 'invalid_json' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+        request,
+      });
+    }
+
+    const { code, redirectUri, refreshToken } = body;
 
     if (url.pathname === '/api/auth' && code) {
       return tokenExchange(
@@ -45,6 +90,7 @@ export default {
           redirect_uri: redirectUri || '',
           grant_type: 'authorization_code',
         }),
+        request,
       );
     }
 
@@ -56,9 +102,10 @@ export default {
           client_secret: env.GOOGLE_CLIENT_SECRET,
           grant_type: 'refresh_token',
         }),
+        request,
       );
     }
 
-    return new Response('Not found', { status: 404 });
+    return respond('Not found', { status: 404, headers: {}, request });
   },
 };

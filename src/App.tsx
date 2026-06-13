@@ -459,7 +459,7 @@ export default function App() {
   }, [token, refreshToken]);
 
   const saveNow = () => {
-    if (!token || syncState === 'error') { signIn(); return; }
+    if (!token) { signIn(); return; }
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
     setSyncState('saving');
     doSave(tabsState);
