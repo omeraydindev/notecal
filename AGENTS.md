@@ -22,8 +22,8 @@
 - `src/mathLanguage.ts` defines the custom CodeMirror stream language for NoteCal syntax, while `src/mathTheme.ts` defines light/dark CodeMirror themes.
 - `src/constants.ts` exports `initMath()` for lazy-loading Math.js and shared constants; the math instance is stored in the Jotai `mathAtom`.
 - `src/tabUtils.ts` holds tab creation, normalization, and title utility functions.
-- `src/evalUtils.ts` holds pure expression helpers: `isMathDisplayObject`, `formatNumber`, `resolveLineReferences`, `stripComments`, `evaluateSingle`, `processLines`.
-- `src/hooks/useCurrencyRates.ts` fetches exchange rates and seeds generated conversion functions into the Math.js scope.
+- `src/evalUtils.ts` holds pure expression helpers: `isMathDisplayObject`, `formatNumber`, `resolveLineReferences`, `stripComments`, `evaluateSingle`, `processLines`, and the `currencyCodes` set for identifying currency unit results.
+- `src/hooks/useCurrencyRates.ts` fetches exchange rates and registers currencies as mathjs units (e.g. `100 usd to eur`) — always fetches on first load when Math.js is ready.
 - `src/hooks/useTabBackup.ts` handles JSON export/import of all tabs.
 - `src/hooks/useScrollSync.ts` synchronizes results panel scrolling with CodeMirror via native DOM scroll events.
 - `src/hooks/useCrossTabRef.ts` provides the `ref()` function for cross-tab variable access with lazy evaluation.
@@ -34,13 +34,13 @@
 - Math evaluation uses Math.js.
 
 ## Runtime Gotchas
-- Currency conversion functions are generated only after text contains a zero-argument pattern like `usd_to_try()` and rates are fetched from `https://open.er-api.com/v6/latest/USD`.
+- Currency conversion uses mathjs units (e.g. `100 usd to eur`). Rates are fetched from `https://open.er-api.com/v6/latest/USD` on first load when math.js is ready. Once loaded, any mathjs unit conversion works (e.g. `1 inch to cm`, `90 km/h to m/s`).
 - Tabs, font size, and word wrap persist in `localStorage` via Jotai `atomWithStorage` (keys: `notecal-tabs`, `notecal-fontSize`, `notecal-wordWrap`); theme follows `prefers-color-scheme` and is not persisted.
 - When word wrap is enabled, the results panel aligns with visual (wrapped) lines: the result appears on the first visual line and empty slots appear on continuation lines, with the results array having one entry per visual line.
 - The results panel is line-synchronized to CodeMirror scrolling via direct DOM access to `.cm-scroller`; changes to editor layout, line height, or padding can desync results.
 - Numeric shorthand handling (`k`, `m`, `b`) and comment stripping are duplicated for full-line evaluation and selection-popup evaluation; keep behavior aligned when changing expression parsing.
-- **Line references** (`$1`, `$-1`, etc.): pre-processed by `resolveLineReferences` before Math.js evaluation. Replaced with numeric value from `results[].value`. Invalid refs (forward, out-of-range, null target) are left as-is — the `$`-detection check (`expr.includes('$')`) then bails out with blank result. Both full-line and popup evaluation have their own `$`-check. The same `resolveLineReferences` function is shared; keep in sync if changing.
-- **Cross-tab `ref()`**: A `refFn` closure is seeded into the Math.js scope on each evaluation pass. After evaluation, the scope is saved to `tabScopesRef.current[activeTab.title]` for other tabs to read. `ref("tab name", "var name")` returns the variable value if found, else `NaN`. Only numeric variables are exposed; functions are filtered out.
+- **Line references** (`$1`, `$-1`, etc.): `resolveLineReferences` rewrites `$1` → `_L1` (a scope variable name). `processLines` stores each line's raw mathjs result in `scope._L{lineNum}` after evaluation, so line refs work with any result type (numbers, units, fractions). Unresolved `$` refs (forward, out-of-range) stay as-is; the `$`-detection check then bails. Selection popup eval works the same way — scope already has `_L{N}` from the main pass.
+- **Cross-tab `ref()`**: A `refFn` closure is seeded into the Math.js scope on each evaluation pass. After evaluation, the scope is saved to `tabScopesRef.current[activeTab.title]` for other tabs to read. `ref("tab name", "var name")` returns the variable value (number, unit, or any mathjs type) if found, else `NaN`. Currency units and other complex types pass through unaltered, so `ref("tab", "salary") to eur` works.
 
 ## Deployment
 - Pushes to `main` trigger `.github/workflows/pages-deployment.yaml`, which builds with Node 20 and publishes `dist` to Cloudflare Pages project `notecal`.

@@ -2,6 +2,7 @@ export type MathScope = Record<string, unknown>;
 
 export interface MathInstance {
   evaluate: (expr: string, scope?: MathScope) => unknown;
+  createUnit: (name: string, options?: { definition?: string; aliases?: string[] }) => void;
 }
 
 export type MathDisplayObject = {

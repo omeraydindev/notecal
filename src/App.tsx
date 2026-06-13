@@ -66,9 +66,9 @@ export default function App() {
 
   useClickOutside(overflowRef, () => setIsOverflowOpen(false), isOverflowOpen);
 
-  const currencyLoaded = useCurrencyRates(text, scopeRef);
+  const currencyLoaded = useCurrencyRates();
 
-  const { popup, clearPopup, selectionExtension } = useSelectionPopup(results, scopeRef);
+  const { popup, clearPopup, selectionExtension } = useSelectionPopup(scopeRef);
 
   const { exportTabs, importTabs } = useTabBackup(tabsState, setTabsState, setIsOverflowOpen);
 
@@ -76,7 +76,7 @@ export default function App() {
 
   const { sensors, handleDragStart, handleDragEnd, activeId } = useTabDnd(tabs, setTabsState);
 
-  const { resolveRef, tabsContentKey, tabScopesRef, tabLastModifiedRef } = useCrossTabRef(tabs, scopeRef);
+  const { resolveRef, tabsContentKey, tabScopesRef, tabLastModifiedRef } = useCrossTabRef(tabs);
 
   useEffect(() => {
     initMath().then(setMath);
@@ -94,10 +94,7 @@ export default function App() {
       tabLastModifiedRef.current[tab.id] = tab.lastModified;
     }
 
-    const currencyFunctions = Object.fromEntries(
-      Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
-    );
-    const scope: MathScope = { ...currencyFunctions, ref: resolveRef };
+    const scope: MathScope = { ref: resolveRef };
     const newResults = processLines(text.split('\n'), scope, math);
 
     setResults(newResults);

@@ -11,7 +11,7 @@ savings = income - rent    // 3,800
 **Features:**
 - Variables and math functions
 - Shorthand multipliers (k, m, b)
-- Built-in functions for live currency conversion (`usd_to_try()`, `eur_to_usd()`, etc.)
+- Live currency conversion using mathjs units (`100 usd to eur`, `1 eur to try`, etc.)
 - Multiple note tabs with persisted titles and content
 - Line and block comments (`//`, `/* ... */`)
 - Instant result popup on text selection

@@ -1,5 +1,7 @@
 import type { MathScope, MathDisplayObject, Result, MathInstance } from './types';
 
+export const currencyCodes = new Set<string>();
+
 export const isMathDisplayObject = (value: unknown): value is MathDisplayObject => (
   typeof value === 'object'
   && value !== null
@@ -11,7 +13,7 @@ export const formatNumber = (num: number) => {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(num);
 };
 
-export const resolveLineReferences = (expr: string, currentIdx: number, results: Result[]): string => {
+export const resolveLineReferences = (expr: string, currentIdx: number): string => {
   return expr.replace(/(?<!\w)\$(-?\d+)\b/g, (match, numStr) => {
     const target = parseInt(numStr, 10);
     let targetIdx: number;
@@ -22,8 +24,8 @@ export const resolveLineReferences = (expr: string, currentIdx: number, results:
     } else {
       return match;
     }
-    if (targetIdx >= 0 && targetIdx < currentIdx && results[targetIdx]?.value != null) {
-      return String(results[targetIdx].value);
+    if (targetIdx >= 0 && targetIdx < currentIdx) {
+      return `_L${targetIdx + 1}`;
     }
     return match;
   });
@@ -57,14 +59,14 @@ export const stripComments = (expr: string, isInBlockComment = false) => {
   return { expr: result.trim(), isInBlockComment };
 };
 
-const preprocessExpr = (expr: string, currentIdx?: number, results?: Result[]): string | null => {
+const preprocessExpr = (expr: string, currentIdx?: number): string | null => {
   const { expr: uncommentedExpr } = stripComments(expr);
   if (!uncommentedExpr) return null;
 
   let processedExpr = uncommentedExpr;
 
-  if (currentIdx !== undefined && results) {
-    processedExpr = resolveLineReferences(processedExpr, currentIdx, results);
+  if (currentIdx !== undefined) {
+    processedExpr = resolveLineReferences(processedExpr, currentIdx);
   }
 
   processedExpr = processedExpr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
@@ -82,29 +84,36 @@ export const evaluateSingle = (
   scope: MathScope,
   math: MathInstance,
   currentIdx?: number,
-  results?: Result[],
-): { text: string; value: number | null } => {
-  const processedExpr = preprocessExpr(expr, currentIdx, results);
-  if (!processedExpr) return { text: '', value: null };
+): { text: string; value: number | null; raw: unknown } => {
+  const processedExpr = preprocessExpr(expr, currentIdx);
+  if (!processedExpr) return { text: '', value: null, raw: null };
 
   try {
     const res = math.evaluate(processedExpr, scope);
 
     if (res === undefined || res === null || typeof res === 'function') {
-      return { text: '', value: null };
+      return { text: '', value: null, raw: null };
     }
 
     if (typeof res === 'number') {
-      return { text: formatNumber(res), value: res };
+      return { text: formatNumber(res), value: res, raw: res };
     }
 
     if (isMathDisplayObject(res)) {
-      return { text: res.toString(), value: null };
+      if (res.isUnit) {
+        const units = (res as { units: Array<{ unit: { name: string } }> }).units;
+        if (units && units.every(u => currencyCodes.has(u.unit.name))) {
+          const unitStr = (res as { formatUnits: () => string }).formatUnits();
+          const num = (res as { toNumber: (u: string) => number }).toNumber(unitStr);
+          return { text: `${formatNumber(num)} ${unitStr}`, value: null, raw: res };
+        }
+      }
+      return { text: res.toString(), value: null, raw: res };
     }
 
-    return { text: '', value: null };
+    return { text: '', value: null, raw: null };
   } catch {
-    return { text: '', value: null };
+    return { text: '', value: null, raw: null };
   }
 };
 
@@ -121,8 +130,12 @@ export const processLines = (lines: string[], scope: MathScope, math: MathInstan
       continue;
     }
 
-    const evaluated = evaluateSingle(strippedLine.expr, scope, math, idx, results);
-    results.push(evaluated);
+    const evaluated = evaluateSingle(strippedLine.expr, scope, math, idx);
+    results.push({ text: evaluated.text, value: evaluated.value });
+
+    if (evaluated.raw != null && typeof evaluated.raw !== 'function') {
+      scope[`_L${idx + 1}`] = evaluated.raw;
+    }
   }
 
   return results;

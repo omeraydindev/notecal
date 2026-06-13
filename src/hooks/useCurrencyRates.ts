@@ -1,19 +1,17 @@
-import { useState, useEffect, useRef, type RefObject } from 'react';
-import type { MathScope } from '../types';
+import { useState, useEffect, useRef } from 'react';
+import { useAtomValue } from 'jotai';
+import { mathAtom } from '../store';
+import { currencyCodes } from '../evalUtils';
 
-export function useCurrencyRates(text: string, scopeRef: RefObject<MathScope>): boolean {
-  const currencyRates = useRef<Record<string, number>>({});
-  const availableCurrencies = useRef<string[]>([]);
-  const currencyFetchTriggered = useRef(false);
+export function useCurrencyRates(): boolean {
+  const math = useAtomValue(mathAtom);
+  const fetchedRef = useRef(false);
   const [currencyLoaded, setCurrencyLoaded] = useState(false);
 
   useEffect(() => {
-    if (currencyFetchTriggered.current) return;
+    if (!math || fetchedRef.current) return;
 
-    const currencyPattern = /\b[a-z]{3}_to_[a-z]{3}\(\)/;
-    if (!currencyPattern.test(text)) return;
-
-    currencyFetchTriggered.current = true;
+    fetchedRef.current = true;
 
     const fetchCurrencyRates = async () => {
       try {
@@ -22,27 +20,19 @@ export function useCurrencyRates(text: string, scopeRef: RefObject<MathScope>): 
 
         if (data && data.rates) {
           const rates = { USD: 1, ...data.rates };
-          const currencies = Object.keys(rates);
 
-          currencyRates.current = rates;
-          availableCurrencies.current = currencies;
-
-          const currencyFunctions: Record<string, () => number> = {};
-
-          for (const from of currencies) {
-            for (const to of currencies) {
-              if (from !== to) {
-                const fnName = `${from.toLowerCase()}_to_${to.toLowerCase()}`;
-                currencyFunctions[fnName] = () => {
-                  const fromRate = rates[from];
-                  const toRate = rates[to];
-                  return toRate / fromRate;
-                };
-              }
+          math.createUnit('usd', { aliases: ['USD'] });
+          for (const code of Object.keys(rates)) {
+            if (code === 'USD') continue;
+            const lower = code.toLowerCase();
+            try {
+              math.createUnit(lower, { definition: `${1 / rates[code]} usd`, aliases: [code] });
+              currencyCodes.add(lower);
+            } catch {
+              // unit already exists
             }
           }
 
-          Object.assign(scopeRef.current, currencyFunctions);
           setCurrencyLoaded(true);
         }
       } catch (error) {
@@ -51,7 +41,7 @@ export function useCurrencyRates(text: string, scopeRef: RefObject<MathScope>): 
     };
 
     fetchCurrencyRates();
-  }, [text, scopeRef]);
+  }, [math]);
 
   return currencyLoaded;
 }
