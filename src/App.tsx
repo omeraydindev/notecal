@@ -8,8 +8,9 @@ import { EditorView } from '@codemirror/view';
 import { mathLanguageExtension } from './mathLanguage';
 import { mathDarkTheme, mathLightTheme } from './mathTheme';
 import { createTab, getNextNewNoteTitle } from './tabUtils';
-import { tabsAtom, fontSizeAtom, wordWrapAtom } from './store';
+import { tabsAtom, fontSizeAtom, wordWrapAtom, mathAtom } from './store';
 import { processLines } from './evalUtils';
+import { initMath } from './constants';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useClickOutside } from './hooks/useClickOutside';
 import { useCurrencyRates } from './hooks/useCurrencyRates';
@@ -40,6 +41,7 @@ export default function App() {
   const [wordWrap, setWordWrap] = useAtom(wordWrapAtom);
   const [isRenamingTab, setIsRenamingTab] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
+  const [math, setMath] = useAtom(mathAtom);
   
   // Theme mode: 'device' follows system, 'light'/'dark' are explicit
   const [themeMode, setThemeMode] = useState<'device' | 'light' | 'dark'>('device');
@@ -76,8 +78,13 @@ export default function App() {
 
   const { resolveRef, tabsContentKey, tabScopesRef, tabLastModifiedRef } = useCrossTabRef(tabs, scopeRef);
 
+  useEffect(() => {
+    initMath().then(setMath);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Evaluate text line by line whenever it changes
   useEffect(() => {
+    if (!math) return;
     // Invalidate cached scopes for tabs whose content changed since last evaluation
     for (const tab of tabs) {
       const prev = tabLastModifiedRef.current[tab.id];
@@ -91,13 +98,13 @@ export default function App() {
       Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
     );
     const scope: MathScope = { ...currencyFunctions, ref: resolveRef };
-    const newResults = processLines(text.split('\n'), scope);
+    const newResults = processLines(text.split('\n'), scope, math);
 
     setResults(newResults);
     scopeRef.current = { ...scope, ref: resolveRef }; // Store scope for popup evaluation (keep ref)
     tabScopesRef.current[activeTab.title] = { ...scope };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, currencyLoaded, activeTab.title, tabsContentKey]);
+  }, [text, currencyLoaded, activeTab.title, tabsContentKey, math]);
 
   useEffect(() => {
     if (!isRenamingTab) return;

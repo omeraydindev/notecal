@@ -1,5 +1,4 @@
-import type { MathScope, MathDisplayObject, Result } from './types';
-import { math } from './constants';
+import type { MathScope, MathDisplayObject, Result, MathInstance } from './types';
 
 export const isMathDisplayObject = (value: unknown): value is MathDisplayObject => (
   typeof value === 'object'
@@ -81,6 +80,7 @@ const preprocessExpr = (expr: string, currentIdx?: number, results?: Result[]): 
 export const evaluateSingle = (
   expr: string,
   scope: MathScope,
+  math: MathInstance,
   currentIdx?: number,
   results?: Result[],
 ): { text: string; value: number | null } => {
@@ -108,7 +108,7 @@ export const evaluateSingle = (
   }
 };
 
-export const processLines = (lines: string[], scope: MathScope): Result[] => {
+export const processLines = (lines: string[], scope: MathScope, math: MathInstance): Result[] => {
   let isInBlockComment = false;
   const results: Result[] = [];
 
@@ -121,7 +121,7 @@ export const processLines = (lines: string[], scope: MathScope): Result[] => {
       continue;
     }
 
-    const evaluated = evaluateSingle(strippedLine.expr, scope, idx, results);
+    const evaluated = evaluateSingle(strippedLine.expr, scope, math, idx, results);
     results.push(evaluated);
   }
 

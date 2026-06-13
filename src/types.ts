@@ -1,5 +1,9 @@
 export type MathScope = Record<string, unknown>;
 
+export interface MathInstance {
+  evaluate: (expr: string, scope?: MathScope) => unknown;
+}
+
 export type MathDisplayObject = {
   isUnit?: boolean;
   isComplex?: boolean;

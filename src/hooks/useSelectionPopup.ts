@@ -1,7 +1,9 @@
 import { useState, useRef, useMemo, useCallback, type RefObject } from 'react';
+import { useAtomValue } from 'jotai';
 import { EditorView } from '@codemirror/view';
 import type { MathScope, Result } from '../types';
 import { evaluateSingle } from '../evalUtils';
+import { mathAtom } from '../store';
 
 export interface PopupState {
   visible: boolean;
@@ -14,6 +16,7 @@ export function useSelectionPopup(
   results: Result[],
   scopeRef: RefObject<MathScope>,
 ) {
+  const math = useAtomValue(mathAtom);
   const [popup, setPopup] = useState<PopupState>({ visible: false, x: 0, y: 0, result: '' });
 
   const clearPopup = useCallback(() => {
@@ -21,6 +24,8 @@ export function useSelectionPopup(
   }, []);
 
   const handleSelectionChange = (view: EditorView) => {
+    if (!math) return;
+
     const selection = view.state.selection.main;
     const selectedText = view.state.doc.sliceString(selection.from, selection.to);
 
@@ -38,7 +43,7 @@ export function useSelectionPopup(
 
       const lineNumber = view.state.doc.lineAt(selection.from).number;
 
-      const result = evaluateSingle(selectedText, scopeRef.current, lineNumber - 1, results).text || null;
+      const result = evaluateSingle(selectedText, scopeRef.current, math, lineNumber - 1, results).text || null;
 
       if (result) {
         const coords = view.coordsAtPos(selection.to);

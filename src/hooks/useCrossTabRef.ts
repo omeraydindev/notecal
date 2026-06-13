@@ -1,11 +1,14 @@
 import { useRef, useMemo, type RefObject } from 'react';
+import { useAtomValue } from 'jotai';
 import type { MathScope, NoteTab } from '../types';
 import { processLines } from '../evalUtils';
+import { mathAtom } from '../store';
 
 export function useCrossTabRef(
   tabs: NoteTab[],
   scopeRef: RefObject<MathScope>,
 ) {
+  const math = useAtomValue(mathAtom);
   const tabScopesRef = useRef<Record<string, MathScope>>({});
   const evaluatingTabsSet = useRef(new Set<string>());
   const tabLastModifiedRef = useRef<Record<string, number>>({});
@@ -16,6 +19,8 @@ export function useCrossTabRef(
   );
 
   const resolveRef = (tabName: string, varName: string): number => {
+    if (!math) return NaN;
+
     let tabScope = tabScopesRef.current[tabName];
     if (!tabScope) {
       const tab = tabs.find(t => t.title === tabName);
@@ -29,7 +34,7 @@ export function useCrossTabRef(
           Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
         );
         const scope: MathScope = { ...currencyFunctions, ref: resolveRef };
-        processLines(tab.text.split('\n'), scope);
+        processLines(tab.text.split('\n'), scope, math);
 
         evaluatingTabsSet.current.delete(tabName);
         tabScope = scope;

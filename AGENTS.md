@@ -20,14 +20,14 @@
 ## App Structure
 - This is a single-package React 19 + TypeScript + Vite app; the runtime entrypoint is `src/main.tsx`, and nearly all UI/evaluation behavior lives in `src/App.tsx`.
 - `src/mathLanguage.ts` defines the custom CodeMirror stream language for NoteCal syntax, while `src/mathTheme.ts` defines light/dark CodeMirror themes.
-- `src/constants.ts` holds the Math.js instance (`math`) and shared constants.
+- `src/constants.ts` exports `initMath()` for lazy-loading Math.js and shared constants; the math instance is stored in the Jotai `mathAtom`.
 - `src/tabUtils.ts` holds tab creation, normalization, and title utility functions.
 - `src/evalUtils.ts` holds pure expression helpers: `isMathDisplayObject`, `formatNumber`, `resolveLineReferences`, `stripComments`, `evaluateSingle`, `processLines`.
 - `src/hooks/useCurrencyRates.ts` fetches exchange rates and seeds generated conversion functions into the Math.js scope.
 - `src/hooks/useTabBackup.ts` handles JSON export/import of all tabs.
 - `src/hooks/useScrollSync.ts` synchronizes results panel scrolling with CodeMirror via native DOM scroll events.
 - `src/hooks/useCrossTabRef.ts` provides the `ref()` function for cross-tab variable access with lazy evaluation.
-- `src/store.ts` defines Jotai atoms for persisted state (tabs, font size, word wrap) using `atomWithStorage` — no manual `useEffect` persistence.
+- `src/store.ts` defines Jotai atoms for persisted state (tabs, font size, word wrap) and the math instance (`mathAtom`) — no manual `useEffect` persistence.
 - `src/components/SortableTab.tsx` is the draggable tab component.
 - Tailwind CSS v4 is wired through `@tailwindcss/vite` in `vite.config.ts` and imported from `src/index.css`; there is no separate Tailwind config file.
 - Tooltips use `react-tooltip` via a shared `<Tooltip id="header-tooltip">` in `App.tsx`; anchor elements use `data-tooltip-id` + `data-tooltip-content`.

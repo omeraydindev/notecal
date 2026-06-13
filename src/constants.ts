@@ -1,6 +1,13 @@
-import { create, all } from 'mathjs';
+import type { MathInstance } from './types';
 
-export const math = create(all);
+let _math: MathInstance | null = null;
+
+export async function initMath(): Promise<MathInstance> {
+  if (_math) return _math;
+  const { create, all } = await import('mathjs');
+  _math = create(all) as MathInstance;
+  return _math;
+}
 
 export const TABS_STORAGE_KEY = 'notecal-tabs';
 
