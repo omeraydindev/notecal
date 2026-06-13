@@ -14,6 +14,7 @@ import { isMathDisplayObject, formatNumber, resolveLineReferences, stripComments
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useClickOutside } from './hooks/useClickOutside';
 import { useCurrencyRates } from './hooks/useCurrencyRates';
+import { useSelectionPopup } from './hooks/useSelectionPopup';
 import SortableTab from './components/SortableTab';
 import {
   DndContext,
@@ -58,14 +59,6 @@ export default function App() {
     });
   }, []);
 
-  // Popup state for instant expression results
-  const [popup, setPopup] = useState<{
-    visible: boolean;
-    x: number;
-    y: number;
-    result: string;
-  }>({ visible: false, x: 0, y: 0, result: '' });
-
   // Drag and drop state
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -81,6 +74,8 @@ export default function App() {
   useClickOutside(overflowRef, () => setIsOverflowOpen(false), isOverflowOpen);
 
   const currencyLoaded = useCurrencyRates(text, scopeRef);
+
+  const { popup, clearPopup, selectionExtension } = useSelectionPopup(results, scopeRef);
 
   const exportTabs = useCallback(() => {
     const blob = new Blob([JSON.stringify(tabsState, null, 2)], { type: 'application/json' });
@@ -150,50 +145,6 @@ export default function App() {
         ...current,
         tabs: arrayMove(current.tabs, oldIndex, newIndex),
       }));
-    }
-  };
-
-  // Evaluate a single expression (for popup)
-  const evaluateExpression = (expr: string, currentLineIdx?: number): string | null => {
-    const { expr: uncommentedExpr } = stripComments(expr);
-    if (!uncommentedExpr) return null;
-
-    let processedExpr = uncommentedExpr;
-
-    // Resolve line references if we know the current line
-    if (currentLineIdx !== undefined) {
-      processedExpr = resolveLineReferences(processedExpr, currentLineIdx, results);
-    }
-
-    // Process shorthand multipliers (k, m, b)
-    processedExpr = processedExpr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
-      const multipliers: { [key: string]: number } = { k: 1e3, m: 1e6, b: 1e9 };
-      return `(${num} * ${multipliers[suffix.toLowerCase()]})`;
-    });
-
-    if (processedExpr.includes('$')) return null;
-
-    try {
-      // Use the current scope from main evaluation
-      const res = math.evaluate(processedExpr, scopeRef.current);
-
-      if (res === undefined || res === null || typeof res === 'function') {
-        return null;
-      }
-
-      // Standard Numbers
-      if (typeof res === 'number') {
-        return formatNumber(res);
-      }
-
-      // Math.js specific objects (Units, Complex numbers, etc.)
-      if (isMathDisplayObject(res)) {
-        return res.toString();
-      }
-
-      return null;
-    } catch {
-      return null;
     }
   };
 
@@ -379,7 +330,7 @@ export default function App() {
   };
 
   const beginRenameTab = (tabId: string, title: string) => {
-    setPopup({ visible: false, x: 0, y: 0, result: '' });
+    clearPopup();
     setRenameDraft(title);
     setIsRenamingTab(true);
     setTabsState((current) => ({ ...current, activeTabId: tabId }));
@@ -401,13 +352,13 @@ export default function App() {
   };
 
   const selectTab = (tabId: string) => {
-    setPopup({ visible: false, x: 0, y: 0, result: '' });
+    clearPopup();
     setIsRenamingTab(false);
     setTabsState((current) => ({ ...current, activeTabId: tabId }));
   };
 
   const addTab = () => {
-    setPopup({ visible: false, x: 0, y: 0, result: '' });
+    clearPopup();
     setIsRenamingTab(false);
     setTabsState((current) => {
       const tab = createTab('', getNextNewNoteTitle(current.tabs));
@@ -421,7 +372,7 @@ export default function App() {
   };
 
   const closeTab = (tabId: string) => {
-    setPopup({ visible: false, x: 0, y: 0, result: '' });
+    clearPopup();
     setIsRenamingTab(false);
     setTabsState((current) => {
       if (current.tabs.length <= 1) return current;
@@ -436,50 +387,6 @@ export default function App() {
 
       return { ...current, tabs: nextTabs, activeTabId: nextActiveTabId };
     });
-  };
-
-  // Handle selection changes to show popup
-  const handleSelectionChange = (view: EditorView) => {
-    const selection = view.state.selection.main;
-    const selectedText = view.state.doc.sliceString(selection.from, selection.to);
-
-    if (selectedText && selection.from !== selection.to) {
-      // Skip popup for multiline selections
-      if (selectedText.includes('\n')) {
-        setPopup({ visible: false, x: 0, y: 0, result: '' });
-        return;
-      }
-
-      // Skip popup for plain numbers (e.g., "32", "3.14", "-42")
-      const isPlainNumber = /^-?\d+(\.\d+)?$/.test(selectedText.trim());
-      if (isPlainNumber) {
-        setPopup({ visible: false, x: 0, y: 0, result: '' });
-        return;
-      }
-
-      // Get the line number for relative reference resolution
-      const lineNumber = view.state.doc.lineAt(selection.from).number;
-
-      // Evaluate the selected expression
-      const result = evaluateExpression(selectedText, lineNumber - 1);
-      
-      if (result) {
-        // Get cursor position for popup placement
-        const coords = view.coordsAtPos(selection.to);
-        if (coords) {
-          setPopup({
-            visible: true,
-            x: coords.left,
-            y: coords.bottom + 8, // 8px below the selection
-            result: result,
-          });
-        }
-      } else {
-        setPopup({ visible: false, x: 0, y: 0, result: '' });
-      }
-    } else {
-      setPopup({ visible: false, x: 0, y: 0, result: '' });
-    }
   };
 
   // Styling and layout calculations
@@ -538,15 +445,6 @@ export default function App() {
       lineHeight: `${lineHeight}px !important`,
     },
   }), [lineHeight, fontSize]);
-
-  const handleSelectionChangeRef = useRef(handleSelectionChange);
-  handleSelectionChangeRef.current = handleSelectionChange;
-
-  const selectionExtension = useMemo(() => EditorView.updateListener.of((update) => {
-    if (update.selectionSet && update.view) {
-      handleSelectionChangeRef.current(update.view);
-    }
-  }), []);
 
   const cmExtensions = useMemo(() => [
     mathLanguageExtension,

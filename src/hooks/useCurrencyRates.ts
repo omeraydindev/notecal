@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, type MutableRefObject } from 'react';
+import { useState, useEffect, useRef, type RefObject } from 'react';
 import type { MathScope } from '../types';
 
-export function useCurrencyRates(text: string, scopeRef: MutableRefObject<MathScope>): boolean {
+export function useCurrencyRates(text: string, scopeRef: RefObject<MathScope>): boolean {
   const currencyRates = useRef<Record<string, number>>({});
   const availableCurrencies = useRef<string[]>([]);
   const currencyFetchTriggered = useRef(false);
