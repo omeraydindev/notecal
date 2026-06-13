@@ -15,6 +15,7 @@ import { useMediaQuery } from './hooks/useMediaQuery';
 import { useClickOutside } from './hooks/useClickOutside';
 import { useCurrencyRates } from './hooks/useCurrencyRates';
 import { useSelectionPopup } from './hooks/useSelectionPopup';
+import { useVisualLineCounts } from './hooks/useVisualLineCounts';
 import SortableTab from './components/SortableTab';
 import {
   DndContext,
@@ -67,7 +68,6 @@ export default function App() {
   const renameInputRef = useRef<HTMLInputElement>(null);
   const scopeRef = useRef<MathScope>({});
   const tabScopesRef = useRef<Record<string, MathScope>>({});
-  const [visualLineCounts, setVisualLineCounts] = useState<number[]>([]);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
@@ -391,6 +391,9 @@ export default function App() {
 
   // Styling and layout calculations
   const lineHeight = fontSize * 2;
+
+  const visualResults = useVisualLineCounts(wordWrap, lineHeight, editorRef, results);
+
   const paddingTop = 24;
   const paddingBottom = `calc(${paddingTop}px + 50vh)`;
   const stripeColor = isDarkMode ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)';
@@ -417,19 +420,6 @@ export default function App() {
     '--stripe-color': stripeColor,
   } as CSSProperties;
 
-  const visualResults = useMemo(() => {
-    if (!wordWrap || visualLineCounts.length === 0) return results;
-    const expanded: Result[] = [];
-    results.forEach((res, i) => {
-      const count = visualLineCounts[i] || 1;
-      expanded.push(res);
-      for (let j = 1; j < count; j++) {
-        expanded.push({ text: '', value: null });
-      }
-    });
-    return expanded;
-  }, [results, wordWrap, visualLineCounts]);
-
   // Create EditorView theme to force exact line height matching stripes
   const editorTheme = useMemo(() => EditorView.theme({
     '.cm-content': {
@@ -452,44 +442,6 @@ export default function App() {
     selectionExtension,
     ...(wordWrap ? [EditorView.lineWrapping] : []),
   ], [editorTheme, selectionExtension, wordWrap]);
-
-  const updateVisualLineCounts = useCallback(() => {
-    if (!wordWrap) {
-      setVisualLineCounts([]);
-      return;
-    }
-    const editorContainer = editorRef.current;
-    if (!editorContainer) return;
-    const scroller = editorContainer.querySelector('.cm-scroller');
-    if (!scroller) return;
-    const cmLines = scroller.querySelectorAll('.cm-line');
-    const counts: number[] = [];
-    cmLines.forEach((lineEl) => {
-      const height = lineEl.getBoundingClientRect().height;
-      const count = Math.max(1, Math.round(height / lineHeight));
-      counts.push(count);
-    });
-    setVisualLineCounts(counts);
-  }, [wordWrap, lineHeight]);
-
-  useEffect(() => {
-    const scroller = editorRef.current?.querySelector('.cm-scroller');
-    if (!scroller) return;
-
-    const resizeObserver = new ResizeObserver(() => {
-      updateVisualLineCounts();
-    });
-
-    resizeObserver.observe(scroller);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [updateVisualLineCounts]);
-
-  useEffect(() => {
-    updateVisualLineCounts();
-  }, [results, updateVisualLineCounts]);
 
   return (
     <div className={`flex flex-col h-screen font-sans transition-colors duration-200 ${isDarkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
