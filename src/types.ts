@@ -1,3 +1,17 @@
+export type MathScope = Record<string, unknown>;
+
+export type MathDisplayObject = {
+  isUnit?: boolean;
+  isComplex?: boolean;
+  isFraction?: boolean;
+  toString: () => string;
+};
+
+export interface Result {
+  text: string;
+  value: number | null;
+}
+
 export interface NoteTab {
   id: string;
   title: string;
