@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react';
+import { useAtom } from 'jotai';
 import { Tooltip } from 'react-tooltip';
 import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, MoreHorizontal, Download, Upload } from 'lucide-react';
-import type { NoteTab, StoredTabsState } from './types';
+import type { MathScope, MathDisplayObject, Result } from './types';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { mathLanguageExtension } from './mathLanguage';
 import { mathDarkTheme, mathLightTheme } from './mathTheme';
-import { create, all } from 'mathjs';
+import { math } from './constants';
+import { createTab, normalizeTabsState, getNextNewNoteTitle } from './tabUtils';
+import { tabsAtom } from './store';
+import SortableTab from './components/SortableTab';
 import {
   DndContext,
   closestCenter,
@@ -23,132 +27,7 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   horizontalListSortingStrategy,
-  useSortable,
 } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-
-type MathScope = Record<string, unknown>;
-
-type MathDisplayObject = {
-  isUnit?: boolean;
-  isComplex?: boolean;
-  isFraction?: boolean;
-  toString: () => string;
-};
-
-interface Result {
-  text: string;
-  value: number | null;
-}
-
-const math = create(all);
-
-const TABS_STORAGE_KEY = 'notecal-tabs';
-const LEGACY_TEXT_STORAGE_KEY = 'notecal-text';
-
-const INITIAL_TEXT = `// Welcome to NoteCal!
-// Type anywhere, math gets calculated automatically on the right.
-
-income = 5k
-rent = 1.2k
-groceries = 150 * 4
-utilities = 200
-subscriptions = 15 + 10 + 12.50
-
-total = rent + groceries + utilities + subscriptions
-
-// You can use variables and shorthands (k, m, b):
-savings = 0.20 * income
-bonus = 1.5m
-
-// And complex math functions:
-sqrt(144) + 2^3
-sin(45 deg)
-`;
-
-const createTabId = () => `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-const getDefaultTabTitle = (index: number) => {
-  return index === 0 ? 'New Note' : `New Note (${index + 1})`;
-};
-
-const createTab = (text = '', title = 'New Note'): NoteTab => ({
-  id: createTabId(),
-  title,
-  text,
-  lastModified: Date.now(),
-});
-
-const normalizeTab = (tab: unknown, index: number): NoteTab | null => {
-  if (!tab || typeof tab !== 'object') return null;
-  const candidate = tab as Partial<NoteTab>;
-  if (typeof candidate.id !== 'string' || typeof candidate.text !== 'string') return null;
-
-  return {
-    id: candidate.id,
-    title: typeof candidate.title === 'string' && candidate.title.trim()
-      ? candidate.title.trim()
-      : getDefaultTabTitle(index),
-    text: candidate.text,
-    lastModified: typeof candidate.lastModified === 'number' ? candidate.lastModified : 0,
-  };
-};
-
-const normalizeTabsState = (state: unknown): StoredTabsState | null => {
-  if (!state || typeof state !== 'object') return null;
-
-  const candidate = state as Partial<StoredTabsState>;
-  if (!Array.isArray(candidate.tabs)) return null;
-
-  const tabs = candidate.tabs
-    .map((tab, index) => normalizeTab(tab, index))
-    .filter((tab): tab is NoteTab => tab !== null);
-  if (tabs.length === 0) return null;
-
-  const activeTabId = tabs.some((tab) => tab.id === candidate.activeTabId)
-    ? (candidate.activeTabId as string)
-    : tabs[0].id;
-
-  return {
-    tabs,
-    activeTabId,
-    updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : 0,
-  };
-};
-
-const loadInitialTabsState = (): StoredTabsState => {
-  if (typeof window !== 'undefined') {
-    const savedTabs = localStorage.getItem(TABS_STORAGE_KEY);
-    if (savedTabs !== null) {
-      try {
-        const normalized = normalizeTabsState(JSON.parse(savedTabs));
-        if (normalized) return normalized;
-      } catch (error) {
-        console.warn('Failed to load saved tabs:', error);
-      }
-    }
-
-    const legacyText = localStorage.getItem(LEGACY_TEXT_STORAGE_KEY);
-    const text = legacyText ?? INITIAL_TEXT;
-    const tab = createTab(text, 'New Note');
-    return { tabs: [tab], activeTabId: tab.id, updatedAt: Date.now() };
-  }
-
-  const tab = createTab(INITIAL_TEXT, 'New Note');
-  return { tabs: [tab], activeTabId: tab.id, updatedAt: Date.now() };
-};
-
-const getNextNewNoteTitle = (tabs: NoteTab[]) => {
-  const existingTitles = new Set(tabs.map((tab) => tab.title.trim()));
-  if (!existingTitles.has('New Note')) return 'New Note';
-
-  let index = 2;
-  while (existingTitles.has(`New Note (${index})`)) {
-    index += 1;
-  }
-
-  return `New Note (${index})`;
-};
 
 const isMathDisplayObject = (value: unknown): value is MathDisplayObject => (
   typeof value === 'object'
@@ -156,133 +35,9 @@ const isMathDisplayObject = (value: unknown): value is MathDisplayObject => (
   && ('isUnit' in value || 'isComplex' in value || 'isFraction' in value)
 );
 
-interface SortableTabProps {
-  tab: NoteTab;
-  index: number;
-  isActive: boolean;
-  isDarkMode: boolean;
-  isRenaming: boolean;
-  renameDraft: string;
-  tabsLength: number;
-  onSelect: () => void;
-  onClose: () => void;
-  onBeginRename: () => void;
-  onRenameChange: (value: string) => void;
-  onRenameCommit: () => void;
-  onRenameCancel: () => void;
-  renameInputRef: React.RefObject<HTMLInputElement | null>;
-  onKeyDown: (e: React.KeyboardEvent) => void;
-}
-
-function SortableTab({
-  tab,
-  index,
-  isActive,
-  isDarkMode,
-  isRenaming,
-  renameDraft,
-  tabsLength,
-  onSelect,
-  onClose,
-  onBeginRename,
-  onRenameChange,
-  onRenameCommit,
-  onRenameCancel,
-  renameInputRef,
-  onKeyDown,
-}: SortableTabProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: tab.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : undefined,
-  };
-
-  const title = tab.title.trim() || (index === 0 ? 'New Note' : `New Note (${index + 1})`);
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={`group flex shrink-0 basis-22 sm:basis-26 items-center h-9 border-r text-sm transition-all duration-150 cursor-grab active:cursor-grabbing ${
-        isDragging
-          ? 'opacity-0'
-          : isActive
-            ? isDarkMode
-              ? 'bg-slate-900 border-slate-700 text-slate-100 shadow-[inset_0_2px_0_#10b981]'
-              : 'bg-white border-slate-300 text-slate-900 shadow-[inset_0_2px_0_#059669]'
-            : isDarkMode
-              ? 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-              : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-white hover:text-slate-800'
-      }`}
-    >
-      {isActive && isRenaming ? (
-        <input
-          ref={renameInputRef}
-          value={renameDraft}
-          onChange={(e) => onRenameChange(e.target.value)}
-          onBlur={onRenameCommit}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === 'Enter') {
-              onRenameCommit();
-            } else if (e.key === 'F2') {
-              e.preventDefault();
-              onBeginRename();
-            } else if (e.key === 'Escape') {
-              onRenameCancel();
-            }
-          }}
-          className={`min-w-0 flex-1 h-full px-3 bg-transparent outline-none ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}
-          aria-label="Rename current tab"
-        />
-      ) : (
-        <button type="button"
-          onClick={(event) => {
-            if (event.shiftKey && tabsLength > 1) {
-              onClose();
-              return;
-            }
-            onSelect();
-          }}
-          onDoubleClick={() => onBeginRename()}
-          onKeyDown={onKeyDown}
-          className={`min-w-0 flex-1 h-full px-3 ${tabsLength === 1 ? 'text-center' : 'text-left'}`}
-          title={`${title} (double-click or F2 to rename${tabsLength > 1 ? ', shift-click to close' : ''})`}
-        >
-          <span className="block truncate">{title}</span>
-        </button>
-      )}
-      {tabsLength > 1 && (
-        <button type="button"
-          aria-label={`Close ${title}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          className={`mr-2 shrink-0 p-0.5 opacity-60 transition-colors group-hover:opacity-100 ${
-            isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'
-          }`}
-        >
-          <X size={14} />
-        </button>
-      )}
-    </div>
-  );
-}
 
 export default function App() {
-  const [tabsState, setTabsState] = useState(loadInitialTabsState);
+  const [tabsState, setTabsState] = useAtom(tabsAtom);
   const { tabs, activeTabId } = tabsState;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const text = activeTab?.text ?? '';
@@ -410,7 +165,7 @@ export default function App() {
     };
     input.click();
     setIsOverflowOpen(false);
-  }, []);
+  }, [setTabsState]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -444,17 +199,6 @@ export default function App() {
       }));
     }
   };
-
-  // Persist tabs to local storage whenever they change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(tabsState));
-      } catch (error) {
-        console.warn('Failed to persist tabs:', error);
-      }
-    }
-  }, [tabsState]);
 
   // Persist font size to local storage whenever it changes
   useEffect(() => {
