@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react';
 import { Tooltip } from 'react-tooltip';
-import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, LogIn, LogOut, Cloud, Loader2, MoreHorizontal, Download, Upload } from 'lucide-react';
-import { useGoogleAuth } from './auth';
-import { saveToDrive, loadFromDrive } from './drive';
-import usePreventLeave from './usePreventLeave';
+import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, MoreHorizontal, Download, Upload } from 'lucide-react';
 import type { NoteTab, StoredTabsState } from './types';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
@@ -362,14 +359,6 @@ export default function App() {
   const currencyFetchTriggered = useRef(false);
   const [currencyLoaded, setCurrencyLoaded] = useState(false);
   const [visualLineCounts, setVisualLineCounts] = useState<number[]>([]);
-  const { token, isSignedIn, isLoading, signIn, signOut, refreshToken } = useGoogleAuth();
-  const [syncState, setSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const autoSaveRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const isSavingRef = useRef(false);
-  const lastSavedUpdatedAtRef = useRef(tabsState.updatedAt);
-  const isFirstRender = useRef(true);
-  const driveLoadedRef = useRef(false);
-  const [isInitialSync, setIsInitialSync] = useState(false);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
@@ -422,95 +411,6 @@ export default function App() {
     input.click();
     setIsOverflowOpen(false);
   }, []);
-
-  usePreventLeave(syncState === 'saving' || isInitialSync);
-
-  const doSave = useCallback(async (state: StoredTabsState) => {
-    if (!token) return;
-    if (isSavingRef.current) {
-      if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-      autoSaveRef.current = setTimeout(() => doSave(state), 500);
-      return;
-    }
-    isSavingRef.current = true;
-
-    const save = async (t: string) => {
-      const merged = await saveToDrive(t, { ...state, updatedAt: lastSavedUpdatedAtRef.current });
-      lastSavedUpdatedAtRef.current = merged.updatedAt;
-      setSyncState('saved');
-    };
-
-    try {
-      await save(token);
-    } catch {
-      const newToken = await refreshToken();
-      if (newToken) {
-        try {
-          await save(newToken);
-          return;
-        } catch {
-          // retry failed — fall through to error state
-        }
-      }
-      setSyncState('error');
-    } finally {
-      isSavingRef.current = false;
-    }
-  }, [token, refreshToken]);
-
-  const saveNow = () => {
-    if (!token) { signIn(); return; }
-    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-    setSyncState('saving');
-    doSave(tabsState);
-  };
-
-  // Load from Drive on sign-in
-  useEffect(() => {
-    if (!token || !isSignedIn || driveLoadedRef.current) return;
-    driveLoadedRef.current = true;
-
-    const load = async () => {
-      setIsInitialSync(true);
-      try {
-        const data = await loadFromDrive(token);
-        if (data) setTabsState(data);
-      } catch {
-        refreshToken();
-      } finally {
-        setIsInitialSync(false);
-      }
-    };
-
-    load();
-  }, [token, isSignedIn, setTabsState, refreshToken]);
-
-  useEffect(() => {
-    if (syncState === 'saved' || syncState === 'error') {
-      const t = setTimeout(() => setSyncState('idle'), 2500);
-      return () => clearTimeout(t);
-    }
-  }, [syncState]);
-
-  const prevContentKeyRef = useRef('');
-
-  // Auto-save on content changes (not on tab switches that only change activeTabId)
-  useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; return; }
-    if (!token || !isSignedIn || !driveLoadedRef.current) return;
-
-    const contentKey = JSON.stringify(tabsState.tabs);
-    if (prevContentKeyRef.current === contentKey) return;
-    prevContentKeyRef.current = contentKey;
-
-    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-    autoSaveRef.current = setTimeout(() => {
-      setSyncState('saving');
-      doSave(tabsState);
-    }, 1500);
-
-    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
-  }, [tabsState, token, isSignedIn, doSave]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -806,7 +706,7 @@ export default function App() {
   const tabLastModifiedRef = useRef<Record<string, number>>({});
 
   // Hash of all tab contents — changes when any tab's text or lastModified changes,
-  // ensuring the eval effect re-runs for cross-tab ref() after import or Drive sync.
+  // ensuring the eval effect re-runs for cross-tab ref() after import.
   const tabsContentKey = useMemo(
     () => tabs.map((t) => `${t.id}:${t.lastModified}`).join('|'),
     [tabs],
@@ -1127,61 +1027,6 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-x-2.5">
-          {/* Auth / Drive controls */}
-          {import.meta.env.VITE_DRIVE_SYNC_ENABLED === 'true' && import.meta.env.VITE_GOOGLE_CLIENT_ID && (
-            <>
-              {!isLoading && !isSignedIn && (
-                <button type="button"
-                  onClick={signIn}
-                  data-tooltip-id="header-tooltip"
-                  data-tooltip-content="Sign in with Google to sync notes to Drive"
-                  className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-emerald-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-emerald-600 hover:border-slate-300'}`}
-                >
-                  <LogIn size={17} />
-                </button>
-              )}
-
-              {isSignedIn && (
-                <>
-                  <button type="button"
-                    onClick={saveNow}
-                    className={`p-2.5 rounded-lg border transition-colors duration-200 ${
-                      isDarkMode
-                        ? 'border-slate-800 bg-slate-900 hover:text-emerald-400 hover:border-slate-700'
-                        : 'border-slate-200 bg-slate-100 hover:text-emerald-600 hover:border-slate-300'
-                    } ${
-                      syncState === 'error'
-                        ? 'text-red-400'
-                        : syncState !== 'idle'
-                          ? 'text-emerald-400'
-                          : isDarkMode
-                            ? 'text-slate-400'
-                            : 'text-slate-500'
-                    }`}
-                    data-tooltip-id="header-tooltip"
-                    data-tooltip-content={syncState === 'error' ? 'Sync failed' : (syncState === 'saving' || isInitialSync) ? 'Syncing...' : 'Synced to Drive'}
-                  >
-                    {syncState === 'saving' || isInitialSync ? (
-                      <Loader2 size={17} className="animate-spin" />
-                    ) : (
-                      <Cloud size={17} />
-                    )}
-                  </button>
-                  <button type="button"
-                    onClick={signOut}
-                    className={`p-2.5 rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:text-red-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:text-red-600 hover:border-slate-300'}`}
-                    data-tooltip-id="header-tooltip"
-                    data-tooltip-content="Sign out"
-                  >
-                    <LogOut size={17} />
-                  </button>
-                </>
-              )}
-
-              <div className={`hidden md:block w-px h-6 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`} />
-            </>
-          )}
-
           {/* Desktop inline controls */}
           <div className="hidden md:flex items-center gap-x-2.5">
             <div className={`flex items-center rounded-lg border transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700' : 'border-slate-200 bg-slate-100 text-slate-500 hover:border-slate-300'}`}>
