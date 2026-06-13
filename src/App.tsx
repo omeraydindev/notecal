@@ -10,6 +10,8 @@ import { mathDarkTheme, mathLightTheme } from './mathTheme';
 import { math } from './constants';
 import { createTab, normalizeTabsState, getNextNewNoteTitle } from './tabUtils';
 import { tabsAtom, fontSizeAtom, wordWrapAtom } from './store';
+import { useMediaQuery } from './hooks/useMediaQuery';
+import { useClickOutside } from './hooks/useClickOutside';
 import SortableTab from './components/SortableTab';
 import {
   DndContext,
@@ -49,20 +51,7 @@ export default function App() {
   
   // Theme mode: 'device' follows system, 'light'/'dark' are explicit
   const [themeMode, setThemeMode] = useState<'device' | 'light' | 'dark'>('device');
-  const [systemDark, setSystemDark] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-    return false;
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
+  const systemDark = useMediaQuery('(prefers-color-scheme: dark)');
 
   const isDarkMode = themeMode === 'device' ? systemDark : themeMode === 'dark';
 
@@ -98,17 +87,7 @@ export default function App() {
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
-        setIsOverflowOpen(false);
-      }
-    };
-    if (isOverflowOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOverflowOpen]);
+  useClickOutside(overflowRef, () => setIsOverflowOpen(false), isOverflowOpen);
 
   const exportTabs = useCallback(() => {
     const blob = new Blob([JSON.stringify(tabsState, null, 2)], { type: 'application/json' });
