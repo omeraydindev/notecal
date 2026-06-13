@@ -26,6 +26,7 @@
 - `src/hooks/useCurrencyRates.ts` fetches exchange rates and seeds generated conversion functions into the Math.js scope.
 - `src/hooks/useTabBackup.ts` handles JSON export/import of all tabs.
 - `src/hooks/useScrollSync.ts` synchronizes results panel scrolling with CodeMirror via native DOM scroll events.
+- `src/hooks/useCrossTabRef.ts` provides the `ref()` function for cross-tab variable access with lazy evaluation.
 - `src/store.ts` defines Jotai atoms for persisted state (tabs, font size, word wrap) using `atomWithStorage` — no manual `useEffect` persistence.
 - `src/components/SortableTab.tsx` is the draggable tab component.
 - Tailwind CSS v4 is wired through `@tailwindcss/vite` in `vite.config.ts` and imported from `src/index.css`; there is no separate Tailwind config file.

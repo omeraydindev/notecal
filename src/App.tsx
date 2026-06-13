@@ -18,6 +18,7 @@ import { useVisualLineCounts } from './hooks/useVisualLineCounts';
 import { useTabBackup } from './hooks/useTabBackup';
 import { useScrollSync } from './hooks/useScrollSync';
 import { useTabDnd } from './hooks/useTabDnd';
+import { useCrossTabRef } from './hooks/useCrossTabRef';
 import SortableTab from './components/SortableTab';
 import {
   DndContext,
@@ -58,7 +59,6 @@ export default function App() {
   const resultsRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const scopeRef = useRef<MathScope>({});
-  const tabScopesRef = useRef<Record<string, MathScope>>({});
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
@@ -74,50 +74,7 @@ export default function App() {
 
   const { sensors, handleDragStart, handleDragEnd, activeId } = useTabDnd(tabs, setTabsState);
 
-  // --- Shared evaluation helpers ---
-
-  // Cycle detection for lazy cross-tab evaluation
-  const evaluatingTabsSet = useRef(new Set<string>());
-
-  // Resolve a cross-tab ref, lazily evaluating the referenced tab if needed
-  const resolveRef = (tabName: string, varName: string): number => {
-    let tabScope = tabScopesRef.current[tabName];
-    if (!tabScope) {
-      const tab = tabs.find(t => t.title === tabName);
-      if (tab) {
-        tabScope = evaluateTabContent(tabName, tab.text);
-        tabScopesRef.current[tabName] = tabScope;
-      }
-    }
-    if (!tabScope) return NaN;
-    const val = tabScope[varName];
-    return typeof val === 'number' ? val : NaN;
-  };
-
-  // Evaluate a tab's text to build its scope (used for lazy cross-tab ref resolution)
-  const evaluateTabContent = (tabName: string, tabText: string): MathScope => {
-    if (evaluatingTabsSet.current.has(tabName)) return {};
-    evaluatingTabsSet.current.add(tabName);
-
-    const currencyFunctions = Object.fromEntries(
-      Object.entries(scopeRef.current).filter(([, v]) => typeof v === 'function')
-    );
-    const scope: MathScope = { ...currencyFunctions, ref: resolveRef };
-    processLines(tabText.split('\n'), scope);
-
-    evaluatingTabsSet.current.delete(tabName);
-    return scope;
-  };
-
-  // Track lastModified per tab to detect stale cross-tab ref() caches
-  const tabLastModifiedRef = useRef<Record<string, number>>({});
-
-  // Hash of all tab contents — changes when any tab's text or lastModified changes,
-  // ensuring the eval effect re-runs for cross-tab ref() after import.
-  const tabsContentKey = useMemo(
-    () => tabs.map((t) => `${t.id}:${t.lastModified}`).join('|'),
-    [tabs],
-  );
+  const { resolveRef, tabsContentKey, tabScopesRef, tabLastModifiedRef } = useCrossTabRef(tabs, scopeRef);
 
   // Evaluate text line by line whenever it changes
   useEffect(() => {
