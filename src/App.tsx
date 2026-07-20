@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react';
 import { useAtom } from 'jotai';
 import { Tooltip } from 'react-tooltip';
-import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, MoreHorizontal, Download, Upload } from 'lucide-react';
-import type { MathScope, Result } from './types';
+import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, MoreHorizontal, Download, Upload, Link } from 'lucide-react';
+import type { MathScope, Result, StoredTabsState } from './types';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
@@ -22,6 +22,8 @@ import { useTabBackup } from './hooks/useTabBackup';
 import { useScrollSync } from './hooks/useScrollSync';
 import { useTabDnd } from './hooks/useTabDnd';
 import { useCrossTabRef } from './hooks/useCrossTabRef';
+import { useUrlState } from './hooks/useUrlState';
+import SharedStateBanner from './components/SharedStateBanner';
 import SortableTab from './components/SortableTab';
 import {
   DndContext,
@@ -34,7 +36,28 @@ import {
 } from '@dnd-kit/sortable';
 
 export default function App() {
-  const [tabsState, setTabsState] = useAtom(tabsAtom);
+  const [savedTabsState, savedSetTabsState] = useAtom(tabsAtom);
+  const { decodedUrlState, buildShareUrl, clearUrlParam } = useUrlState();
+
+  const [sharedState, setSharedState] = useState<StoredTabsState | null>(decodedUrlState);
+
+  const isViewingShared = sharedState !== null;
+
+  const setTabsState = useCallback(
+    (value: StoredTabsState | ((prev: StoredTabsState) => StoredTabsState)) => {
+      if (isViewingShared) {
+        setSharedState(prev => {
+          const next = typeof value === 'function' ? value(prev!) : value;
+          return next;
+        });
+      } else {
+        savedSetTabsState(value);
+      }
+    },
+    [isViewingShared, savedSetTabsState],
+  );
+
+  const tabsState = isViewingShared ? sharedState! : savedTabsState;
   const { tabs, activeTabId } = tabsState;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const text = activeTab?.text ?? '';
@@ -80,6 +103,17 @@ export default function App() {
 
   const { resolveRef, tabsContentKey, tabScopesRef, tabLastModifiedRef } = useCrossTabRef(tabs);
   const currencyLoadedRef = useRef(false);
+
+  const handleCopyShareLink = useCallback(() => {
+    const url = buildShareUrl(tabsState);
+    navigator.clipboard.writeText(url);
+    setIsOverflowOpen(false);
+  }, [tabsState, buildShareUrl]);
+
+  const handleGoBack = useCallback(() => {
+    setSharedState(null);
+    clearUrlParam();
+  }, [clearUrlParam]);
 
   const completionSource = useAutocomplete(scopeRef);
 
@@ -394,11 +428,19 @@ export default function App() {
                 >
                   <Download size={16} /> Export data
                 </button>
+                {!isViewingShared && (
+                  <button type="button"
+                    onClick={importTabs}
+                    className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
+                  >
+                    <Upload size={16} /> Import data
+                  </button>
+                )}
                 <button type="button"
-                  onClick={importTabs}
+                  onClick={handleCopyShareLink}
                   className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
                 >
-                  <Upload size={16} /> Import data
+                  <Link size={16} /> Copy share link
                 </button>
               </div>
             )}
@@ -406,6 +448,13 @@ export default function App() {
 
         </div>
       </header>
+
+      {isViewingShared && (
+        <SharedStateBanner
+          isDarkMode={isDarkMode}
+          onGoBack={handleGoBack}
+        />
+      )}
 
       {/* Tabs */}
       <DndContext

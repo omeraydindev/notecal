@@ -17,6 +17,7 @@ savings = income - rent    // 3,800
 - Instant result popup on text selection
 - Line result references (`$1`, `$-1`, etc.) - reuse any previous line's result by number
 - Cross-tab variable references (`ref("Tab Name", "var")`) - use variables defined in other tabs
+- Shareable URLs (`?v=...`) - export your entire notebook as a compressed URL
 - Syntax highlighting
 - Dark/light mode
 - Word wrapping

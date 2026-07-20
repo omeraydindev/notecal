@@ -42,6 +42,7 @@
 - Numeric shorthand handling (`k`, `m`, `b`) and comment stripping are duplicated for full-line evaluation and selection-popup evaluation; keep behavior aligned when changing expression parsing.
 - **Line references** (`$1`, `$-1`, etc.): `resolveLineReferences` rewrites `$1` → `_L1` (a scope variable name). `processLines` stores each line's raw mathjs result in `scope._L{lineNum}` after evaluation, so line refs work with any result type (numbers, units, fractions). Unresolved `$` refs (forward, out-of-range) stay as-is; the `$`-detection check then bails. Selection popup eval works the same way — scope already has `_L{N}` from the main pass.
 - **Cross-tab `ref()`**: A `refFn` closure is seeded into the Math.js scope on each evaluation pass. After evaluation, the scope is saved to `tabScopesRef.current[activeTab.title]` for other tabs to read. `ref("tab name", "var name")` returns the variable value (number, unit, or any mathjs type) if found, else `NaN`. Currency units and other complex types pass through unaltered, so `ref("tab", "salary") to eur` works.
+- **URL-based state sharing**: `?v=` param loads notebook state from a compressed URL without touching localStorage. A banner offers **Go back** to return to local state. Edits in shared view are ephemeral. Uses `nuqs` + `lz-string`.
 
 ## Deployment
 - Pushes to `main` trigger `.github/workflows/pages-deployment.yaml`, which builds with Node 20 and publishes `dist` to Cloudflare Pages project `notecal`.
