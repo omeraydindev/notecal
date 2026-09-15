@@ -69,6 +69,10 @@ const preprocessExpr = (expr: string, currentIdx?: number): string | null => {
     processedExpr = resolveLineReferences(processedExpr, currentIdx);
   }
 
+  processedExpr = processedExpr.replace(/([A-Za-z_]\w*)\s*(\+=|-=|\*=|\/=)/g, (_match, name, op) => {
+    return `${name} = ${name} ${op[0]}`;
+  });
+
   processedExpr = processedExpr.replace(/(\d+(?:\.\d+)?)([kmb])\b/gi, (_match, num, suffix) => {
     const multipliers: { [key: string]: number } = { k: 1e3, m: 1e6, b: 1e9 };
     return `(${num} * ${multipliers[suffix.toLowerCase()]})`;
