@@ -17,14 +17,24 @@ export function useScrollSync(
         return;
       }
 
-      const handleScroll = () => {
+      const handleEditorScroll = () => {
         if (resultsPanel.scrollTop !== scroller.scrollTop) {
           resultsPanel.scrollTop = scroller.scrollTop;
         }
       };
 
-      scroller.addEventListener('scroll', handleScroll, { passive: true });
-      return () => scroller.removeEventListener('scroll', handleScroll);
+      const handleResultsScroll = () => {
+        if (scroller.scrollTop !== resultsPanel.scrollTop) {
+          scroller.scrollTop = resultsPanel.scrollTop;
+        }
+      };
+
+      scroller.addEventListener('scroll', handleEditorScroll, { passive: true });
+      resultsPanel.addEventListener('scroll', handleResultsScroll, { passive: true });
+      return () => {
+        scroller.removeEventListener('scroll', handleEditorScroll);
+        resultsPanel.removeEventListener('scroll', handleResultsScroll);
+      };
     };
 
     const cleanup = findAndAttachScroller();
