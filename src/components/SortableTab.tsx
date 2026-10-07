@@ -59,6 +59,7 @@ export default function SortableTab({
     <div
       ref={setNodeRef}
       style={style}
+      data-tab-id={tab.id}
       {...attributes}
       {...listeners}
       className={`group flex shrink-0 basis-22 sm:basis-26 items-center h-9 border-r text-sm transition-all duration-150 cursor-grab active:cursor-grabbing ${

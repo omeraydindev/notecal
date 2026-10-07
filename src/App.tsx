@@ -85,6 +85,7 @@ export default function App() {
   const editorRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const tabsScrollRef = useRef<HTMLDivElement>(null);
   const scopeRef = useRef<MathScope>({});
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
@@ -156,6 +157,15 @@ export default function App() {
     renameInputRef.current?.focus();
     renameInputRef.current?.select();
   }, [isRenamingTab]);
+
+  useEffect(() => {
+    const container = tabsScrollRef.current;
+    if (!container) return;
+    const activeEl = container.querySelector(`[data-tab-id="${activeTabId}"]`);
+    if (activeEl) {
+      activeEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }, [activeTabId, tabs.length]);
 
   const updateActiveTabText = (nextText: string) => {
     setTabsState((current) => ({
@@ -463,7 +473,7 @@ export default function App() {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className={`flex items-stretch border-b overflow-x-auto no-scrollbar overscroll-x-none transition-colors duration-200 ${isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
+        <div ref={tabsScrollRef} className={`flex items-stretch border-b overflow-x-auto no-scrollbar overscroll-x-none transition-colors duration-200 ${isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
           <SortableContext
             items={tabs.map((t) => t.id)}
             strategy={horizontalListSortingStrategy}
