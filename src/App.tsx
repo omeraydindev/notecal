@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense, type CSSProperties } from 'react';
 import { useAtom } from 'jotai';
+import { useQueryState } from 'nuqs';
 import { Tooltip } from 'react-tooltip';
-import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, MoreHorizontal, Download, Upload, Link } from 'lucide-react';
+import { Calculator, Sun, Moon, Monitor, ZoomIn, ZoomOut, Plus, X, WrapText, MoreHorizontal, Download, Upload, Link, Smartphone } from 'lucide-react';
 import type { MathScope, Result, StoredTabsState } from './types';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
@@ -19,12 +20,14 @@ import { useAutocomplete } from './hooks/useAutocomplete';
 import { useSelectionPopup } from './hooks/useSelectionPopup';
 import { useVisualLineCounts } from './hooks/useVisualLineCounts';
 import { useTabBackup } from './hooks/useTabBackup';
+import { useTransfer } from './hooks/useTransfer';
 import { useScrollSync } from './hooks/useScrollSync';
 import { useTabDnd } from './hooks/useTabDnd';
 import { useCrossTabRef } from './hooks/useCrossTabRef';
 import { useUrlState } from './hooks/useUrlState';
 import SharedStateBanner from './components/SharedStateBanner';
 import SortableTab from './components/SortableTab';
+const TransferModal = lazy(() => import('./components/TransferModal'));
 import {
   DndContext,
   closestCenter,
@@ -89,6 +92,7 @@ export default function App() {
   const scopeRef = useRef<MathScope>({});
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
 
   useClickOutside(overflowRef, () => setIsOverflowOpen(false), isOverflowOpen);
 
@@ -97,6 +101,29 @@ export default function App() {
   const { popup, clearPopup, selectionExtension } = useSelectionPopup(scopeRef);
 
   const { exportTabs, importTabs } = useTabBackup(tabsState, setTabsState, setIsOverflowOpen);
+
+  const {
+    state: transferState,
+    reset: resetTransfer,
+    startSending: startTransferSend,
+    startReceiving: startTransferReceive,
+    confirmReceive: confirmTransferReceive,
+  } = useTransfer(tabsState, setTabsState);
+
+  // Auto-start receiving when the app is opened via a transfer QR (?join=CODE)
+  const [joinParam, setJoinParam] = useQueryState('join');
+  const joinConsumedRef = useRef(false);
+  const joinCodeRef = useRef('');
+
+  useEffect(() => {
+    if (joinParam && !joinConsumedRef.current) {
+      joinConsumedRef.current = true;
+      joinCodeRef.current = joinParam;
+      setIsTransferOpen(true);
+      startTransferReceive(joinParam);
+      setJoinParam(null);
+    }
+  }, [joinParam, startTransferReceive, setJoinParam]);
 
   useScrollSync(editorRef, resultsRef, activeTabId);
 
@@ -433,6 +460,15 @@ export default function App() {
                 </div>
                 {/* All-screen items */}
                 <button type="button"
+                  onClick={() => {
+                    setIsOverflowOpen(false);
+                    setIsTransferOpen(true);
+                  }}
+                  className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
+                >
+                  <Smartphone size={16} /> Transfer to another device
+                </button>
+                <button type="button"
                   onClick={exportTabs}
                   className={`flex items-center gap-3 px-3.5 py-2 text-sm transition-colors ${isDarkMode ? 'text-slate-300 hover:bg-slate-800 active:bg-slate-700 hover:text-emerald-400 active:text-emerald-300' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200 hover:text-emerald-700 active:text-emerald-800'}`}
                 >
@@ -633,6 +669,43 @@ export default function App() {
         >
           = {popup.result}
         </div>
+      )}
+
+      {isTransferOpen && (
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Transfer notes"
+                className={`w-full max-w-sm rounded-xl border shadow-2xl p-5 text-center text-sm ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-400' : 'bg-white border-slate-200 text-slate-500'}`}
+              >
+                Loading...
+              </div>
+            </div>
+          }
+        >
+          <TransferModal
+            isDarkMode={isDarkMode}
+            state={transferState}
+            startInReceive={joinConsumedRef.current}
+            initialCode={joinCodeRef.current}
+            onStartSending={startTransferSend}
+            onStartReceiving={startTransferReceive}
+            onCancelConnect={resetTransfer}
+            onConfirmReceive={() => {
+              confirmTransferReceive();
+              setIsTransferOpen(false);
+            }}
+            onClose={() => {
+              setIsTransferOpen(false);
+              joinConsumedRef.current = false; // Don't leak ?join= state into manual opens
+              joinCodeRef.current = '';
+              resetTransfer();
+            }}
+          />
+        </Suspense>
       )}
 
       <Tooltip
