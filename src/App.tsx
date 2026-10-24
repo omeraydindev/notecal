@@ -107,23 +107,35 @@ export default function App() {
     reset: resetTransfer,
     startSending: startTransferSend,
     startReceiving: startTransferReceive,
+    startReceivingWithQr: startTransferReceiveWithQr,
+    prepareSendTo: prepareTransferSend,
+    confirmSend: confirmTransferSend,
     confirmReceive: confirmTransferReceive,
   } = useTransfer(tabsState, setTabsState);
 
-  // Auto-start receiving when the app is opened via a transfer QR (?join=CODE)
+  // Transfer links opened from a QR scan:
+  //   ?join=CODE — this device is the receiver (sender showed the QR)
+  //   ?send=CODE — this device is the sender (receiver showed the QR)
   const [joinParam, setJoinParam] = useQueryState('join');
-  const joinConsumedRef = useRef(false);
-  const joinCodeRef = useRef('');
+  const [sendParam, setSendParam] = useQueryState('send');
+  const transferLinkRef = useRef<{ mode: 'receive' | 'send'; code: string } | null>(null);
 
   useEffect(() => {
-    if (joinParam && !joinConsumedRef.current) {
-      joinConsumedRef.current = true;
-      joinCodeRef.current = joinParam;
+    if (transferLinkRef.current) return; // Already handled (also guards StrictMode)
+    if (joinParam) {
+      transferLinkRef.current = { mode: 'receive', code: joinParam };
       setIsTransferOpen(true);
       startTransferReceive(joinParam);
       setJoinParam(null);
+      if (sendParam) setSendParam(null); // Clear a stray second param so reloads don't relaunch
+    } else if (sendParam) {
+      transferLinkRef.current = { mode: 'send', code: sendParam };
+      setIsTransferOpen(true);
+      prepareTransferSend(sendParam);
+      setSendParam(null);
+      if (joinParam) setJoinParam(null);
     }
-  }, [joinParam, startTransferReceive, setJoinParam]);
+  }, [joinParam, sendParam, startTransferReceive, prepareTransferSend, setJoinParam, setSendParam]);
 
   useScrollSync(editorRef, resultsRef, activeTabId);
 
@@ -689,19 +701,22 @@ export default function App() {
           <TransferModal
             isDarkMode={isDarkMode}
             state={transferState}
-            startInReceive={joinConsumedRef.current}
-            initialCode={joinCodeRef.current}
+            startInReceive={transferLinkRef.current?.mode === 'receive'}
+            startInSend={transferLinkRef.current?.mode === 'send'}
+            initialCode={transferLinkRef.current?.code ?? ''}
             onStartSending={startTransferSend}
             onStartReceiving={startTransferReceive}
+            onStartReceivingWithQr={startTransferReceiveWithQr}
+            onConfirmSend={confirmTransferSend}
             onCancelConnect={resetTransfer}
             onConfirmReceive={() => {
               confirmTransferReceive();
               setIsTransferOpen(false);
+              transferLinkRef.current = null;
             }}
             onClose={() => {
               setIsTransferOpen(false);
-              joinConsumedRef.current = false; // Don't leak ?join= state into manual opens
-              joinCodeRef.current = '';
+              transferLinkRef.current = null; // Don't leak link state into manual opens
               resetTransfer();
             }}
           />
